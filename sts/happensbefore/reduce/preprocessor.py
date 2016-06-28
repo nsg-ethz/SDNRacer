@@ -34,7 +34,6 @@ class Preprocessor:
 
     Args:
       subgraphs: List of graphs
-      ignore_pid: Bool, Indicates if we can ignore pid edges or not (default True)
 
     Returns:
 

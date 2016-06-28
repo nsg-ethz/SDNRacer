@@ -5,22 +5,11 @@ import time
 import logging
 import networkx as nx
 
-import utils
-
 # create logger
 logger = logging.getLogger(__name__)
 
-def preprocess_hb_graph(hb_graph):
-  """
-  Preprocesses the whole hb_graph. Can be used to
-  Args:
-    hb_graph:
 
-  Returns:
-
-  """
-
-def get_subgraphs(hb_graph, resultdir):
+def get_subgraphs(hb_graph, resultdir, preprocessing=True):
   """
   Removes unnecessary edge of the graph (based on time) and get a subgraph for each race.
   Each subgraph contains all the nodes starting from a HostSend event to an event that was part of a race.
@@ -28,6 +17,7 @@ def get_subgraphs(hb_graph, resultdir):
   Args:
     hb_graph: hb graph
     resultdir: path to the result directory
+    preprocessing: enable or disable preprocessing (default True)
 
   Returns: List of subgraphs
   """
@@ -62,12 +52,19 @@ def get_subgraphs(hb_graph, resultdir):
   # convert to set for faster lookup
   race_ids = set(race_ids)
 
+  # preprocess graph
+  if preprocessing:
+    # remove all dispensable nodes
+    remove_dispensable_nodes(cg, race_ids)
+
   # find paths
   for ind, send in enumerate(hb_graph.host_sends):
-    paths_to_race = get_path_to_race(cg, send, race_ids)
-    for paths in paths_to_race:
-      # last element is the race event id
-      all_paths[paths[-1]].append(paths)
+    # check if the host_send event is still in the graph after preprocessing
+    if cg.has_node(send):
+      paths_to_race = get_path_to_race(cg, send, race_ids)
+      for paths in paths_to_race:
+        # last element is the race event id
+        all_paths[paths[-1]].append(paths)
 
   # Now construct the subgraphs
   subgraphs = []
@@ -125,22 +122,6 @@ def get_path_to_race(graph, host_send, race_ids):
   logger.debug("Number of paths to race events: %s" % len(paths_to_race))
   logger.debug("Number of alt_paths %s" % len(alt_paths))
 
-  # first extend all alternative paths
-  """
-  for path in alt_paths[:]:
-    for alt in alt_paths[:]:
-      if alt == path:
-        continue
-
-      if alt[-1] in path:
-        node_index = path.index(alt[-1])
-        if len(path) > node_index + 1:
-          alt_paths.append(alt + path[(node_index + 1):])
-        else:
-          alt_paths.append(alt)
-  logger.debug("Number of extended alt_paths %s" % len(alt_paths))
-  """
-
   # Construct all pathes to the race event with the alternative pathes until no new ones are found.
   old_len = 0
   while len(paths_to_race) > old_len:
@@ -183,4 +164,37 @@ def _get_path_to_race(graph, node, race_ids, path, paths_to_race, visited, alt_p
   return
 
 
+def remove_dispensable_nodes(hb_graph, race_ids):
+  """
+  Removes all events that happen after (are below) a race event.
+  Args:
+    hb_graph: networkx bigraph
+    race_ids: List of all race events
+  """
+  logger.debug("Remove_dispensable nodes...")
+  logger.debug("Total nodes before removal: %d" % hb_graph.number_of_nodes())
+
+  tstart = time.time()
+  nodes_removed = 1
+  tot_nodes_removed = 0
+  while nodes_removed > 0:
+    nodes_removed = 0
+    # Get leave nodes
+    leaf_nodes = [x for x in hb_graph.nodes_iter() if not hb_graph.successors(x)]
+    for leaf in leaf_nodes:
+      # If a leaf node is not part of a race, add it for removal
+      if leaf not in race_ids:
+        hb_graph.remove_node(leaf)
+        nodes_removed += 1
+
+    tot_nodes_removed += nodes_removed
+
+  # Check that still all races are in the graph
+  for race in race_ids:
+    assert hb_graph.has_node(race), "Race event with id %s not in graph" % race
+
+  logger.debug("Removed %s nodes in %f seconds" % (tot_nodes_removed, time.time() - tstart))
+  logger.debug("Total nodes after removal: %d" % hb_graph.number_of_nodes())
+
+  return hb_graph
 

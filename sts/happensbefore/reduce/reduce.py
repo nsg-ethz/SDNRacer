@@ -65,7 +65,12 @@ class Reduce:
     self.hb_graph = hb_graph
 
     # get subgraphs
-    self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir)
+    if config.has_section('subgraph') and config.has_option('subgraph', 'preprocessing'):
+      preprocessing = config.getboolean('subgraph', 'preprocessing')
+    else:
+      preprocessing = False
+
+    self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=preprocessing)
     self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
 
   def run(self):
