@@ -1,30 +1,27 @@
 
-import sys
+
 import os
 import time
-import ConfigParser
-import logging.config
+import logging
 import networkx as nx
 
 import utils
 
 # create logger
-logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
 def get_subgraphs(hb_graph, resultdir):
-  '''
+  """
   Removes unnecessary edge of the graph (based on time) and get a subgraph for each race.
   Each subgraph contains all the nodes starting from a HostSend event to an event that was part of a race.
 
   Args:
     hb_graph: hb graph
     resultdir: path to the result directory
-    numb_proc: Number of processes to use (default 4)
 
   Returns: List of subgraphs
-  '''
+  """
   logger.debug("Get_subgraphs...")
   tstart = time.time()
 
@@ -63,7 +60,6 @@ def get_subgraphs(hb_graph, resultdir):
       # last element is the race event id
       all_paths[paths[-1]].append(paths)
 
-
   # Now construct the subgraphs
   subgraphs = []
   for ind, race in enumerate(harmful):
@@ -100,7 +96,7 @@ def get_subgraphs(hb_graph, resultdir):
 
 
 def get_path_to_race(graph, host_send, race_ids):
-  '''
+  """
   Traverses the graph starting from host_send. Return paths from host_send to all reachable race events.
   Args:
     graph:      graph
@@ -108,7 +104,7 @@ def get_path_to_race(graph, host_send, race_ids):
     races:      list of all race events
 
   Returns: path to all reachable race events
-  '''
+  """
   logger.debug("Find paths from host_send %s to all race events." % host_send)
   path = []             # Path to the current node
   visited = []          # List of all visited nodes
@@ -147,9 +143,9 @@ def get_path_to_race(graph, host_send, race_ids):
 
 
 def _get_path_to_race(graph, node, race_ids, path, paths_to_race, visited, alt_paths):
-  '''
+  """
   Recursive part of get_path_to_race.
-  '''
+  """
   path.append(node)
 
   # If node is already in path we can return, happens when there are multiple paths to a node

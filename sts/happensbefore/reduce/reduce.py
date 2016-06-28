@@ -4,17 +4,10 @@ import sys
 import os
 import ConfigParser
 import logging.config
+import argparse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
-
-from hb_graph import *
-from preprocessor import *
-from cluster import *
-from subgraph import *
-
-# create logger
-logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf', disable_existing_loggers=False)
-logger = logging.getLogger(__name__)
+import hb_graph
 
 
 class Reduce:
@@ -24,11 +17,23 @@ class Reduce:
     print "########################################################################"
     print ""
 
-    logger.info("Init... ")
     # Create separate results directory
     self.resultdir = os.path.join(os.path.dirname(trace_file), 'reduce')
     if not os.path.exists(self.resultdir):
       os.makedirs(self.resultdir)
+
+    # Configure logger
+    logdir = os.path.join(os.path.dirname(self.resultdir), 'log')
+    if not os.path.exists(logdir):
+      os.makedirs(logdir)
+    logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf',
+                              defaults={'logfilename': "%s/reduce.log" % logdir}, disable_existing_loggers=False)
+    self.logger = logging.getLogger(__name__)
+
+    # Import modules, this has to be done after the logger configuration because of the dynamic logging file path
+    import preprocessor
+    import cluster
+    import subgraph
 
     # Parse config
     config = ConfigParser.RawConfigParser()
@@ -41,7 +46,7 @@ class Reduce:
       else:
         clusterargs = {}
 
-      self.cluster = Cluster(self.resultdir, **clusterargs)
+      self.cluster = cluster.Cluster(self.resultdir, **clusterargs)
     else:
       self.cluster = None
 
@@ -52,35 +57,35 @@ class Reduce:
       else:
         prepargs = {}
 
-      self.preprocessor = Preprocessor(**prepargs)
+      self.preprocessor = preprocessor.Preprocessor(**prepargs)
     else:
       self.preprocessor = None
 
     # graph data
     self.hb_graph = hb_graph
 
+    # get subgraphs
+    self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir)
+    self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
 
   def run(self):
-    # get subgraphs
-    self.subgraphs = get_subgraphs(self.hb_graph, self.resultdir)
-    logger.info("Number of subgraphs: %d" % len(self.subgraphs))
-
     # Preprocessing
     if self.preprocessor:
-      logger.info("Start preprocessing...")
+      self.logger.info("Start preprocessing...")
       self.subgraphs = self.preprocessor.run(self.subgraphs)
-      logger.info("Finished preprocessing")
+      self.logger.info("Finished preprocessing")
 
     # Clustering
     if self.cluster:
-      logger.info("Start clustering...")
+      self.logger.info("Start clustering...")
       self.cluster.run(self.subgraphs)
-      logger.info("Finished clustering")
+      self.logger.info("Finished clustering")
 
     # Results
 
 
-
+def auto_int(x):
+  return int(x, 0)
 
 if __name__ == '__main__':
   # First call hb_graph.py and provide the same parameters
@@ -131,7 +136,7 @@ if __name__ == '__main__':
     else:
       args.rw_delta = args.ww_delta = args.delta
 
-  m = Main(args.trace_file, print_pkt=args.print_pkt,
+  m = hb_graph.Main(args.trace_file, print_pkt=args.print_pkt,
               add_hb_time=not args.no_hbt, rw_delta=args.rw_delta, ww_delta=args.ww_delta,
               filter_rw=args.filter_rw, ignore_ethertypes=args.ignore_ethertypes,
               no_race=args.no_race, alt_barr=args.alt_barr, verbose=args.verbose,

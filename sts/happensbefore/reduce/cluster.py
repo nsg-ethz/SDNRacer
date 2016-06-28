@@ -4,7 +4,6 @@ import time
 import sys
 import networkx as nx
 
-logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +27,7 @@ class Cluster:
     return clusters
 
   def cluster_iso(self, clusters):
-    '''
+    """
     Clusters based on isomorphism. Only takes first subgraph in each cluster into account.
 
     Args:
@@ -36,7 +35,7 @@ class Cluster:
 
     Returns: New list of clusters
 
-    '''
+    """
     tstart = time.time()
     new_clusters = []
 

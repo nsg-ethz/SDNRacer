@@ -1,13 +1,10 @@
-import logging.config
-import os
+import logging
 import sys
 
 import networkx as nx
 
 import utils
-import hb_events
 
-logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 class Preprocessor:
@@ -17,7 +14,7 @@ class Preprocessor:
     pass
 
   def run(self, subgraphs):
-    '''
+    """
     Runs preprocessing functions depending on the configuration of the preprocessor.
 
     Args:
@@ -25,7 +22,7 @@ class Preprocessor:
 
     Returns:      preprocessed list of subgraphs
 
-    '''
+    """
     subgraphs = self.extract_last_controller_action(subgraphs)
 
     return subgraphs
@@ -33,7 +30,7 @@ class Preprocessor:
 
 
   def extract_last_controller_action(self, subgraphs):
-    '''
+    """
     only keeps nodes from the race events up to the last packet send that required controller action
 
     Args:
@@ -42,7 +39,7 @@ class Preprocessor:
 
     Returns:
 
-    '''
+    """
 
     new_subgraphs = []
 

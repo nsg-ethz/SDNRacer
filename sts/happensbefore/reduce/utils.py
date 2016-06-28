@@ -1,6 +1,6 @@
-import sys
-import os
-import logging.config
+
+
+import logging
 import itertools
 
 import networkx as nx
@@ -8,12 +8,11 @@ import networkx as nx
 import hb_events
 
 # create logger
-logging.config.fileConfig(os.path.dirname(__file__) + '/logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
 def find_last_controllerhandle(graph, node):
-  '''
+  """
   Traverses the graph upwards starting from node and returns list of all nodes up to the last controller handle
   including the packedsend or hostsend that led to this controller handle.
 
@@ -22,7 +21,7 @@ def find_last_controllerhandle(graph, node):
     node:   node_id
 
   Returns:  list of nodes
-  '''
+  """
 
   nodes = []
   _find_last_controllerhandle(graph, node, nodes)
@@ -30,9 +29,9 @@ def find_last_controllerhandle(graph, node):
 
 
 def _find_last_controllerhandle(graph, node, nodes, found_controller_handle=False):
-  '''
+  """
   Recursive part of find_last_controller_handle
-  '''
+  """
   # Return if the node was already traversed
   if node in nodes:
     return
