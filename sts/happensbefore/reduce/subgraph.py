@@ -10,6 +10,15 @@ import utils
 # create logger
 logger = logging.getLogger(__name__)
 
+def preprocess_hb_graph(hb_graph):
+  """
+  Preprocesses the whole hb_graph. Can be used to
+  Args:
+    hb_graph:
+
+  Returns:
+
+  """
 
 def get_subgraphs(hb_graph, resultdir):
   """
@@ -113,10 +122,11 @@ def get_path_to_race(graph, host_send, race_ids):
   _get_path_to_race(graph, host_send, race_ids, path, paths_to_race, visited, alt_paths)
 
   # check if we have alternative paths which lead to a race
-  logger.debug("Number of paths: %s" % len(paths_to_race))
+  logger.debug("Number of paths to race events: %s" % len(paths_to_race))
   logger.debug("Number of alt_paths %s" % len(alt_paths))
 
   # first extend all alternative paths
+  """
   for path in alt_paths[:]:
     for alt in alt_paths[:]:
       if alt == path:
@@ -129,15 +139,21 @@ def get_path_to_race(graph, host_send, race_ids):
         else:
           alt_paths.append(alt)
   logger.debug("Number of extended alt_paths %s" % len(alt_paths))
-  for path in paths_to_race[:]:
-    for alt in alt_paths:
-      if alt[-1] in path:
-        node_index = path.index(alt[-1])
-        if len(path) > node_index + 1:
-          paths_to_race.append(alt + path[(node_index + 1):])
-        else:
-          paths_to_race.append(alt)
-  logger.debug("Final number of paths %s" % len(paths_to_race))
+  """
+
+  # Construct all pathes to the race event with the alternative pathes until no new ones are found.
+  old_len = 0
+  while len(paths_to_race) > old_len:
+    old_len = len(paths_to_race)
+    for path in paths_to_race[:]:
+      for alt in alt_paths[:]:
+        if alt[-1] in path:
+          node_index = path.index(alt[-1])
+          if len(path) > node_index + 1:
+            paths_to_race.append(alt + path[(node_index + 1):])
+            alt_paths.remove(alt)
+
+  logger.debug("Final number of paths to race events %s" % len(paths_to_race))
 
   return paths_to_race
 

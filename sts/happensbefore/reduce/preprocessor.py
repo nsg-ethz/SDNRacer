@@ -7,6 +7,7 @@ import utils
 
 logger = logging.getLogger(__name__)
 
+
 class Preprocessor:
   # Provides different functions for preprocessing of the subgraphs
   def __init__(self):
@@ -26,8 +27,6 @@ class Preprocessor:
     subgraphs = self.extract_last_controller_action(subgraphs)
 
     return subgraphs
-
-
 
   def extract_last_controller_action(self, subgraphs):
     """

@@ -65,7 +65,7 @@ class Cluster:
     export_path = os.path.join(self.resultdir, "iso_clusters_overview.dot")
     nx.write_dot(nx.disjoint_union_all(overview), export_path)
 
-    # Log infos
+    # Log info
     logger.info("Timing Iso: %f" % (time.time() - tstart))
     logger.info("Clusters before iso: %d" % (len(clusters)))
     logger.info("Clusters after iso:  %d" % (len(new_clusters)))
@@ -78,7 +78,6 @@ class Cluster:
           logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, ind - 1, curr_size))
         curr_size = len(cluster)
         start_ind = ind
-
 
     logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, ind, len(cluster)))
 

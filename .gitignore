@@ -21,6 +21,7 @@ pox/lib/pxpcap/pxpcap_c/WpdPack
 pypy/
 config/20*.py
 config/*final.py
+config/*
 input_traces/20*.trace
 input_traces/20*.trace.unacked
 input_traces/*final.trace
