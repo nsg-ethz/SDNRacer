@@ -565,24 +565,38 @@ class Fuzzer(ControlFlow):
     repair_links(cut_this_round)
 
   def fuzz_traffic(self):
-    if not self.simulation.dataplane_trace:
-      # randomly generate messages from switches
-      for host in self.simulation.topology.hosts:
-        if self.random.random() < self.params.traffic_generation_rate:
-          if len(host.interfaces) > 0:
-            if len(self.params.vip_ip_list) > 0 and self.random.random() < self.params.vip_traffic_percentage:
-              dst_ip = IPAddr(random.choice(self.params.vip_ip_list))
-              msg.event("Injecting a random VIP packet to "+str(dst_ip))
-              traffic_type = "icmp_ping"
-              (dp_event, send) = self.traffic_generator.generate_ip(traffic_type, host, dst_ip)
-              self._log_input_event(TrafficInjection(dp_event=dp_event))
-              send()
-            else:
-              msg.event("Injecting a random packet")
-              traffic_type = "icmp_ping"
-              (dp_event, send) = self.traffic_generator.generate(traffic_type, host)
-              self._log_input_event(TrafficInjection(dp_event=dp_event))
-              send()
+    with open('fuzz_traffic.log', 'a') as f:
+      f.write("Start fuzz_traffic\n")
+      if not self.simulation.dataplane_trace:
+        # randomly generate messages from switches
+        for host in self.simulation.topology.hosts:
+          # If there is a flow for a host, skip the random part and send the next packet
+          if host in self.traffic_generator.flow:
+            f.write("continue flow\n")
+            msg.event("Injecting next flow packet")
+            traffic_type = "icmp_flow"
+            (dp_event, send) = self.traffic_generator.generate_ip(traffic_type, host)
+            self._log_input_event(TrafficInjection(dp_event=dp_event))
+            send()
+
+          elif self.random.random() < self.params.traffic_generation_rate:
+            if len(host.interfaces) > 0:
+              if len(self.params.vip_ip_list) > 0 and self.random.random() < self.params.vip_traffic_percentage:
+                f.write("send vip icmp: %s\n" % host)
+                dst_ip = IPAddr(random.choice(self.params.vip_ip_list))
+                msg.event("Injecting a random VIP packet to "+str(dst_ip))
+                traffic_type = "icmp_flow"
+                # traffic_type = "icmp_ping"
+                (dp_event, send) = self.traffic_generator.generate_ip(traffic_type, host, dst_ip)
+                self._log_input_event(TrafficInjection(dp_event=dp_event))
+                send()
+              else:
+                f.write("Start flow")
+                msg.event("Injecting a random packet")
+                traffic_type = "icmp_ping"
+                (dp_event, send) = self.traffic_generator.generate(traffic_type, host)
+                self._log_input_event(TrafficInjection(dp_event=dp_event))
+                send()
 
   def check_controllers(self):
     def crash_controllers():

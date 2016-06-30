@@ -55,7 +55,7 @@ class Preprocessor:
         logger.error("Did not find the last element in the graph")
         sys.exit(-1)
 
-      # Find the other race event (only for graph verification, not necessary for programm)
+      # Find the other race event (only for graph verification, not necessary for program)
       if "FlowTableWrite" in graph.node[race_i]['label']:
         for pred in graph.predecessors(race_i):
           if "FlowTableWrite" in graph.node[pred]['label'] or "FlowTableRead" in graph.node[pred]['label']:
@@ -80,4 +80,3 @@ class Preprocessor:
       new_subgraphs.append(new_graph)
 
     return new_subgraphs
-

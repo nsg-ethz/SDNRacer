@@ -52,10 +52,16 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
   # convert to set for faster lookup
   race_ids = set(race_ids)
 
+  tprepare = time.time() - tstart
+  tstart = time.time()
+
   # preprocess graph
   if preprocessing:
     # remove all dispensable nodes
     remove_dispensable_nodes(cg, race_ids)
+
+  tpreprocess = time.time() - tstart
+  tstart = time.time()
 
   # find paths
   for ind, send in enumerate(hb_graph.host_sends):
@@ -65,6 +71,9 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
       for paths in paths_to_race:
         # last element is the race event id
         all_paths[paths[-1]].append(paths)
+
+  tfindpaths = time.time() - tstart
+  tstart = time.time()
 
   # Now construct the subgraphs
   subgraphs = []
@@ -91,12 +100,17 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
     export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
     nx.write_dot(subg, export_path)
 
-  export_path = os.path.join(resultdir, "subg_all.dot")
-  nx.write_dot(nx.disjoint_union_all(subgraphs), export_path)
+  tconstuct = time.time() - tstart
 
-  tsubgraphs = time.time()
+  # Uncomment to export a graph containing all subgraphs (slow!)
+  # export_path = os.path.join(resultdir, "subg_all.dot")
+  # nx.write_dot(nx.disjoint_union_all(subgraphs), export_path)
 
-  logger.debug("Timing Subgraphs: %f s" % (tsubgraphs - tstart))
+  logger.debug("Timing Subgraphs: ")
+  logger.debug("Time prepare: %f" % tprepare)
+  logger.debug("Time preprocess: %f" % tpreprocess)
+  logger.debug("Time finding paths: %f" % tfindpaths)
+  logger.debug("Time constructin subgraphs: %f" % tconstuct)
 
   return subgraphs
 
@@ -111,7 +125,6 @@ def get_path_to_race(graph, host_send, race_ids):
 
   Returns: path to all reachable race events
   """
-  logger.debug("Find paths from host_send %s to all race events." % host_send)
   path = []             # Path to the current node
   visited = []          # List of all visited nodes
   paths_to_race = []    # All paths leading to a race event (list of paths)
@@ -119,9 +132,6 @@ def get_path_to_race(graph, host_send, race_ids):
   _get_path_to_race(graph, host_send, race_ids, path, paths_to_race, visited, alt_paths)
 
   # check if we have alternative paths which lead to a race
-  logger.debug("Number of paths to race events: %s" % len(paths_to_race))
-  logger.debug("Number of alt_paths %s" % len(alt_paths))
-
   # Construct all pathes to the race event with the alternative pathes until no new ones are found.
   old_len = 0
   while len(paths_to_race) > old_len:
@@ -133,8 +143,6 @@ def get_path_to_race(graph, host_send, race_ids):
           if len(path) > node_index + 1:
             paths_to_race.append(alt + path[(node_index + 1):])
             alt_paths.remove(alt)
-
-  logger.debug("Final number of paths to race events %s" % len(paths_to_race))
 
   return paths_to_race
 

@@ -34,9 +34,11 @@ class TrafficGenerator (object):
     self.random = random
     self.topology = None
     self._packet_generators = {
-      "arp_query" : self.arp_query,
-      "icmp_ping" : self.icmp_ping,
+        "arp_query": self.arp_query,
+        "icmp_ping": self.icmp_ping,
+        "icmp_flow": self.icmp_ip_flow,
     }
+    self.flow = {}
 
   def set_topology(self, topology):
     self.topology = topology
@@ -82,6 +84,34 @@ class TrafficGenerator (object):
     i.payload = ping
     e.payload = i
     return e
+
+
+  def icmp_ip_flow(self, src_host, src_interface, dst_ip, payload_content=None, force_request=False, num_packets=5):
+    """ Send icmp packets from the same src to the same dst in consecutive rounds of the simulation"""
+
+    # If there is a flow pending for this host, send next packet and decrease count
+    if src_host in self.flow:
+      self.flow[src_host]['num'] -= 1
+      packet = self.flow[src_host]['packet']
+
+      if self.flow[src_host]['num'] <= 0:
+        del self.flow[src_host]
+
+    # Else generate the packet and setup the flow
+    else:
+      if num_packets < 1:
+        raise RuntimeError("Number of packets has to be grater than 0")
+
+      # First generate the ICMP packet
+      packet = self.icmp_ping_ip(src_interface, dst_ip, payload_content, force_request)
+
+      # store packet in dictionary, send them in the next rounds
+      self.flow[src_host] = {}
+      self.flow[src_host]['num'] = num_packets - 1         # Number of pending sends
+      self.flow[src_host]['packet'] = packet               # ICMP ip Packet
+
+    return packet
+
 
   def icmp_ping_ip(self, src_interface, dst_IP, payload_content=None, force_request=False):
     ''' Return an ICMP ping packet; if an interface is none, random addresses are used '''
@@ -135,7 +165,7 @@ class TrafficGenerator (object):
 
 
   def generate_ip(self, packet_type, src_host=None, dst_IP=None,
-               send_to_self=False, payload_content=None, force_request=None):
+                  send_to_self=False, payload_content=None, force_request=None, num_packets=5):
     ''' Generate a packet, return a function to have source host send it, and return the corresponding event '''
     if packet_type not in self._packet_generators:
       raise AttributeError("Unknown event type %s" % str(packet_type))
@@ -146,13 +176,15 @@ class TrafficGenerator (object):
     if send_to_self:
       (dst_host, dst_interface) = (src_host, src_interface)
 
-    if force_request is not None:
-      packet = self.icmp_ping_ip(src_interface, dst_IP,
-                                                  payload_content=payload_content,
-                                                  force_request=force_request)
+    if packet_type == 'icmp_flow':
+      packet = self.icmp_ip_flow(src_host, src_interface, dst_IP, payload_content=payload_content, num_packets=num_packets)
+
     else:
-      packet = self.icmp_ping_ip(src_interface, dst_IP,
-                                                  payload_content=payload_content)
+      if force_request is not None:
+        packet = self.icmp_ping_ip(src_interface, dst_IP, payload_content=payload_content, force_request=force_request)
+      else:
+        packet = self.icmp_ping_ip(src_interface, dst_IP, payload_content=payload_content)
+
     def send():
       src_host.send(src_interface, packet)
     return (DataplaneEvent(src_interface, packet), send)
