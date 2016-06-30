@@ -10,17 +10,17 @@ logger = logging.getLogger(__name__)
 class Cluster:
   # functions to cluster subgraphs
 
-  def __init__(self, resultdir, no_iso=False):
+  def __init__(self, resultdir, iso=True):
     self.resultdir = resultdir
-    self.no_iso = no_iso.lower() not in ['false', '0']  # convert from string 'false' or '0' to bool
+    self.iso = iso.lower() not in ['false', '0']  # convert from string 'false' or '0' to bool
 
   def run(self, subgraphs):
     # List of clusters, Each entry is a list of subgraphs in this cluster
     clusters = [[x] for x in subgraphs]
 
     # Call Cluster Functions
-    if not self.no_iso:
-      logger.debug("Cluster Iphomorphic graphs")
+    if self.iso:
+      logger.debug("Cluster Isomorphic graphs")
       clusters = self.cluster_iso(clusters)
     else:
       logger.debug("Skip Isomorphic clustering")
@@ -44,7 +44,7 @@ class Cluster:
       curr = cluster[0]
       addgraph = True
       for new in new_clusters:
-        if nx.is_isomorphic(curr, new[0], node_match=self.node_match):
+        if nx.is_isomorphic(curr, new[0], node_match=self.node_match, edge_match=self.edge_match):
           new.append(curr)
           addgraph = False
           break
@@ -62,8 +62,9 @@ class Cluster:
       nx.write_dot(cluster[0], export_path)
       overview.append(cluster[0])
 
-    export_path = os.path.join(self.resultdir, "iso_clusters_overview.dot")
-    nx.write_dot(nx.disjoint_union_all(overview), export_path)
+    # Uncomment to export overview of all clusters
+    # export_path = os.path.join(self.resultdir, "iso_clusters_overview.dot")
+    # nx.write_dot(nx.disjoint_union_all(overview), export_path)
 
     # Log info
     logger.info("Timing Iso: %f" % (time.time() - tstart))
@@ -79,7 +80,7 @@ class Cluster:
         curr_size = len(cluster)
         start_ind = ind
 
-    logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, ind, len(cluster)))
+    logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(new_clusters), len(new_clusters[-1])))
 
     return new_clusters
 
@@ -87,3 +88,8 @@ class Cluster:
     # Helperfunction for "cluster_iso"
     # it returns True if two nodes have the same event type
     return type(n1['event']) == type(n2['event'])
+
+  def edge_match(self, e1, e2):
+    # Helperfunction for "cluster_iso"
+    # it returns True if two edges have the same relation
+    return e1['rel'] == e2['rel']

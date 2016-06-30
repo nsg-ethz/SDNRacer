@@ -75,46 +75,47 @@ class Reduce:
 
     ####################################################################################################################
     # Compare generating subgraphs with and without preprocessing (for testing reasons only)
-    self.logger.debug("Compare building subgraphs with and without preprocessing")
-    self.logger.debug("Get subgraphs with preprocessing...")
-    tstart = time.time()
-    sub_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=True)
-    tprep = time.time() - tstart
-    self.logger.debug("Get subgraphs without preprocessing...")
-    tstart = time.time()
-    sub_no_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=False)
-    tnoprep = time.time() - tstart
-
-    # verify that they generate the same subgraphs
-    def node_match(n1, n2):
-      # it returns True if two nodes are the same
-      return n1['label'] == n2['label']
-
-    # first check if they have the same number of subgraphs
-    assert len(sub_preprocessing) == len(sub_no_preprocessing), 'Different number of subgraphs found!'
-
-    for ind, sub in enumerate(sub_preprocessing):
-      sub_equal = None
-      for i, sub_no in enumerate(sub_no_preprocessing):
-        # If the graphs are isomorphic...
-        if nx.is_isomorphic(sub, sub_no, node_match=node_match):
-          # and have the same nodes they are same
-          if set(sub.nodes()) == set(sub_no.nodes()):
-            # found same subgraph
-            sub_equal = sub_no
-            break
-
-      #assert sub_equal is not None, 'No equal graph found in sub_no_preprocessing'
-      if sub_equal:
-        sub_no_preprocessing.remove(sub_equal)
-
-    assert len(sub_no_preprocessing) == 0, 'Sub_no_preprocessing not empty (Len: %s)' % len(sub_no_preprocessing)
-
-    self.logger.debug("Building subgraphs with and without preprocessing lead to the same output :)")
-    self.logger.debug("Time with preprocessing: %f" % tprep)
-    self.logger.debug("Time without preprocessing: %f" % tnoprep)
-
-    sys.exit(0)
+    #
+    # self.logger.debug("Compare building subgraphs with and without preprocessing")
+    # self.logger.debug("Get subgraphs with preprocessing...")
+    # tstart = time.time()
+    # sub_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=True)
+    # tprep = time.time() - tstart
+    # self.logger.debug("Get subgraphs without preprocessing...")
+    # tstart = time.time()
+    # sub_no_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=False)
+    # tnoprep = time.time() - tstart
+    #
+    # # verify that they generate the same subgraphs
+    # def node_match(n1, n2):
+    #   # it returns True if two nodes are the same
+    #   return n1['label'] == n2['label']
+    #
+    # # first check if they have the same number of subgraphs
+    # assert len(sub_preprocessing) == len(sub_no_preprocessing), 'Different number of subgraphs found!'
+    #
+    # for ind, sub in enumerate(sub_preprocessing):
+    #   sub_equal = None
+    #   for i, sub_no in enumerate(sub_no_preprocessing):
+    #     # If the graphs are isomorphic...
+    #     if nx.is_isomorphic(sub, sub_no, node_match=node_match):
+    #       # and have the same nodes they are same
+    #       if set(sub.nodes()) == set(sub_no.nodes()):
+    #         # found same subgraph
+    #         sub_equal = sub_no
+    #         break
+    #
+    #   #assert sub_equal is not None, 'No equal graph found in sub_no_preprocessing'
+    #   if sub_equal:
+    #     sub_no_preprocessing.remove(sub_equal)
+    #
+    # assert len(sub_no_preprocessing) == 0, 'Sub_no_preprocessing not empty (Len: %s)' % len(sub_no_preprocessing)
+    #
+    # self.logger.debug("Building subgraphs with and without preprocessing lead to the same output :)")
+    # self.logger.debug("Time with preprocessing: %f" % tprep)
+    # self.logger.debug("Time without preprocessing: %f" % tnoprep)
+    #
+    # sys.exit(0)
     # END Compare
     ####################################################################################################################
 
