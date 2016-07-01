@@ -108,15 +108,17 @@ class Preprocessor:
     Returns
       new list of preprocessed subgraphs
     """
+    logger.info("Search for patterns...")
     new_subgraphs = []
 
     for p in self.patterns:
+      logger.debug("Pattern: %s" % p)
+
+      found_patterns = {}
       for ind, subg in enumerate(subgraphs):
-        patterns = p.find_pattern(subg)
-        if patterns:
-          print "Found patterns in subgraph %s" % ind
-          print patterns
-          sys.exit()
+        found_patterns[ind] = p.find_pattern(subg)
+        if found_patterns[ind]:
+          logger.debug("Found pattern in subgraph %s" % ind)
 
     return subgraphs
 

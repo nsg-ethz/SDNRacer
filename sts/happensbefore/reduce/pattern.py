@@ -36,6 +36,8 @@ class Pattern:
     """
     Find start and enpoint of a pattern in the given graph, starting at "start_node"
     """
+    # List to store patterns
+    found_patters = []
     # Put all root nodes on the stack
     stack = [x for x in graph.nodes() if not graph.predecessors(x)]
     visited = []
@@ -49,10 +51,14 @@ class Pattern:
 
       if isinstance(graph.node[curr_node]['event'], self.events[0]):
         # found an event which could be the start of the pattern -> check_pattern
-        self.check_pattern(graph, curr_node)
+        p = self.check_pattern(graph, curr_node)
+        if p:
+          found_patters.append(p)
 
       # continue with the successors
       stack.extend(graph.successors(curr_node))
+
+    return found_patters
 
   def check_pattern(self, graph, node):
     """
@@ -81,7 +87,7 @@ class Pattern:
           break
 
       # if the event is not in the patter -> not this pattern
-      if not event_index or event_node_ids[event_index] is not None:
+      if event_index is None or event_node_ids[event_index] is not None:
         return None
       else:
         event_node_ids[event_index] = curr_node
@@ -92,12 +98,13 @@ class Pattern:
 
     # Now we have to check if we found all events
     for ids in event_node_ids:
-      if not ids:
+      if ids is None:
         return None
 
     # At this point, all events are checked, Now check the edges
     for src_ind, dst_ind, rel in self.edges:
-      if not (graph.has_edge(src_ind, dst_ind) and graph.edge[src_ind][dst_ind]['rel'] == rel):
+      if not (graph.has_edge(event_node_ids[src_ind], event_node_ids[dst_ind]) and
+              graph.edge[event_node_ids[src_ind]][event_node_ids[dst_ind]]['rel'] == rel):
         return None
 
     # if not returned until now we found this pattern
