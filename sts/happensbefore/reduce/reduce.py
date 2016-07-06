@@ -105,7 +105,7 @@ class Reduce:
     #         sub_equal = sub_no
     #         break
     #
-    #   #assert sub_equal is not None, 'No equal graph found in sub_no_preprocessing'
+    #   # assert sub_equal is not None, 'No equal graph found in sub_no_preprocessing'
     #   if sub_equal:
     #     sub_no_preprocessing.remove(sub_equal)
     #
@@ -129,6 +129,15 @@ class Reduce:
       self.logger.info("Start preprocessing...")
       self.subgraphs = self.preprocessor.run(self.subgraphs)
       self.logger.info("Finished preprocessing")
+
+    ####################################################################################################################
+    # Print preprocessed subgraphs
+    for ind, g in enumerate(self.subgraphs):
+      export_path = os.path.join(self.resultdir, "subg_%03d_preprocessed.dot" % ind)
+      nx.write_dot(g, export_path)
+
+    ####################################################################################################################
+
 
     # Clustering
     if self.cluster:

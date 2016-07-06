@@ -7,7 +7,7 @@ class Pattern:
   and end node are supportet.
   """
 
-  def __init__(self, events=[], edges=[]):
+  def __init__(self, events=[], edges=[], label=''):
     """
     The following fields have to be defined for each subclass:
 
@@ -28,16 +28,14 @@ class Pattern:
     """
     self.events = events
     self.edges = edges
-
-    # List to store all found patterns in the form (start_node_id, end_node_id)
-    self.patterns = []
+    self.label = label
 
   def find_pattern(self, graph):
     """
     Find start and enpoint of a pattern in the given graph, starting at "start_node"
     """
     # List to store patterns
-    found_patters = []
+    found_patterns = []
     # Put all root nodes on the stack
     stack = [x for x in graph.nodes() if not graph.predecessors(x)]
     visited = []
@@ -53,12 +51,15 @@ class Pattern:
         # found an event which could be the start of the pattern -> check_pattern
         p = self.check_pattern(graph, curr_node)
         if p:
-          found_patters.append(p)
+          found_patterns.append(p)
 
       # continue with the successors
       stack.extend(graph.successors(curr_node))
 
-    return found_patters
+    if found_patterns:
+      return self.substitute(graph, found_patterns)
+    else:
+      return graph
 
   def check_pattern(self, graph, node):
     """
@@ -110,6 +111,52 @@ class Pattern:
     # if not returned until now we found this pattern
     return event_node_ids
 
+  def substitute(self, graph, found_patterns):
+    """
+    Substitues a pattern through a single node.
+    Args:
+      graph: graph
+      found_patterns: list of found patterns
+
+    Returns:
+      new graph
+    """
+    g = graph.copy()
+
+    for p in found_patterns:
+      # get the dpid for the label
+      dpid = g.node[p[0]]['event'].dpid
+
+      # Get all incomming edges (tuple of predecessor node id and edge attributes)
+      in_edges = []
+      for predecessor in g.predecessors(p[0]):
+        in_edges.append([predecessor, g[predecessor][p[0]]])
+
+      # Get all outgoing edges (tuple of successor node id and edge attributes)
+      out_edges = []
+      for successor in g. successors(p[-1]):
+        out_edges.append([successor, g[p[-1]][successor]])
+
+      # remove all nodes
+      g.remove_nodes_from(p)
+
+      # add the substitute node (use the same node id as the first event of the pattern had)
+      g.add_node(p[0])
+
+      g.node[p[0]]['event'] = None
+      g.node[p[0]]['event_ids'] = p
+      g.node[p[0]]['label'] = "%s \\n %s\\n DPID: %d" % (self.label, p[0], dpid)
+      g.node[p[0]]['color'] = 'green'
+
+      # add the in- and out-edges with the same attributes as before
+      for e in in_edges:
+        g.add_edge(e[0], p[0], e[1])
+
+      for e in out_edges:
+        g.add_edge(p[0], e[0], e[1])
+
+    return g
+
 
 class ControllerHandle(Pattern):
   """
@@ -119,16 +166,37 @@ class ControllerHandle(Pattern):
   """
 
   def __init__(self):
+    label = 'ControllerHandle'
     events = [hb_events.HbPacketHandle,
               hb_events.HbMessageSend,
               hb_events.HbControllerHandle,
               hb_events.HbControllerSend,
-              hb_events.HbMessageHandle]
+              hb_events.HbMessageHandle,
+              hb_events.HbPacketSend]
+
     edges = [(0, 1, 'mid'),
              (0, 4, 'pid'),
              (1, 2, 'mid'),
              (2, 3, 'mid'),
-             (3, 4, 'mid')]
+             (3, 4, 'mid'),
+             (4, 5, 'pid')]
 
-    Pattern.__init__(self, events, edges)
+    Pattern.__init__(self, events, edges, label)
+
+
+class SwitchTraversal(Pattern):
+  """
+  A Switch Traversal consists of a simple HbPacketHandle and a HbPacketSend. It happens, when there is already a
+  matching rule in the switch.
+  """
+
+  def __init__(self):
+    label = 'SwitchTraversal'
+    events = [hb_events.HbPacketHandle,
+              hb_events.HbPacketSend]
+
+    edges = [(0, 1, 'pid')]
+
+    Pattern.__init__(self, events, edges, label)
+
 

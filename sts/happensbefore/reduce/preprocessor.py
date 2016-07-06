@@ -21,8 +21,10 @@ class Preprocessor:
       patterns = substitute_patterns.split(',')
       self.patterns = []
       for p in patterns:
-        if p.lower() == 'controllerhandle':
+        if p.strip().lower() == 'controllerhandle':
           self.patterns.append(pattern.ControllerHandle())
+        elif p.strip().lower() == 'switchtraversal':
+          self.patterns.append(pattern.SwitchTraversal())
         else:
           raise RuntimeError("%s is not a valid option for pattern substitution." % p)
 
@@ -111,16 +113,13 @@ class Preprocessor:
     logger.info("Search for patterns...")
     new_subgraphs = []
 
-    for p in self.patterns:
-      logger.debug("Pattern: %s" % p)
+    for ind, subg in enumerate(subgraphs):
+      g = subg
+      for p in self.patterns:
+        g = p.find_pattern(g)
+      new_subgraphs.append(g)
 
-      found_patterns = {}
-      for ind, subg in enumerate(subgraphs):
-        found_patterns[ind] = p.find_pattern(subg)
-        if found_patterns[ind]:
-          logger.debug("Found pattern in subgraph %s" % ind)
-
-    return subgraphs
+    return new_subgraphs
 
 
 
