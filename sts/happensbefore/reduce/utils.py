@@ -1,5 +1,4 @@
 
-
 import logging
 import itertools
 
@@ -11,7 +10,61 @@ import hb_events
 logger = logging.getLogger(__name__)
 
 
-def find_last_controllerhandle(graph, node):
+def find_last_controllerhandle_old(graph, node):
+  """
+  Traverses the graph upwards starting from node and returns list of all nodes up to the last controller handle
+  including the packet out (HbPacketSend, HbHostSend or HbHostHandle) that led to this controller handle.
+  Note: The substituted controllerHandle and switchTraversals end with a HbPacketSend
+
+  Args:
+    graph:  graph
+    node:   node_id
+
+  Returns:  list of nodes
+  """
+
+  stack = [node]
+  nodes = [node]
+
+  while stack:
+    curr_node = stack.pop()
+
+    if curr_node in nodes:
+      continue
+
+    # Check if we visited all successors before continuing
+    if graph.successors(curr_node) > 1:
+      all_successors_visited = True
+      for successor in graph.successors(curr_node):
+        if successor not in nodes:
+          all_successors_visited = False
+          break
+      if not all_successors_visited:
+        continue
+
+    nodes.append(curr_node)
+
+    if isinstance(graph.node[curr_controllerhandle]['event'], hb_events.HbControllerHandle):
+      # found the first controller handle in this branch
+      stack_controllerhandle = graph.predecessors(curr_node)
+      while stack_controllerhandle:
+        curr_controllerhandle = stack_controllerhandle.pop()
+        nodes.append(curr_controllerhandle)
+        if isinstance(graph.node[curr_controllerhandle]['event'],
+                      (hb_events.HbPacketSend, hb_events.HbHostSend, hb_events.HbHostHandle)):
+          continue
+
+        else:
+          # In this case, we didn't find the packet out event that led to the controller handle
+          stack_controllerhandle.extend(graph.predecessors(curr_controllerhandle))
+
+    else:
+      stack.extend(graph.predecessors(curr_node))
+
+  return nodes
+
+
+def find_last_controllerhandle_old(graph, node):
   """
   Traverses the graph upwards starting from node and returns list of all nodes up to the last controller handle
   including the packedsend or hostsend that led to this controller handle.
@@ -54,7 +107,7 @@ def _find_last_controllerhandle(graph, node, nodes, found_controller_handle=Fals
   # If there are multiple predecessors check if two of them are connected. If yes, remove the one
   # which has a shorter path
   if len(predecessors) > 1:
-    for n1, n2 in itertools.combinations(predecessors,2):
+    for n1, n2 in itertools.combinations(predecessors ,2):
       if nx.has_path(graph, n1, n2):
         predecessors.remove(n1)
       elif nx.has_path(graph, n2, n1):

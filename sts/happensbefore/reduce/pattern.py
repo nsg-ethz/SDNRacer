@@ -7,7 +7,7 @@ class Pattern:
   and end node are supportet.
   """
 
-  def __init__(self, events=[], edges=[], label=''):
+  def __init__(self, events=[], edges=[], label='', event_label = ''):
     """
     The following fields have to be defined for each subclass:
 
@@ -29,6 +29,7 @@ class Pattern:
     self.events = events
     self.edges = edges
     self.label = label
+    self.event_label = event_label
 
   def find_pattern(self, graph):
     """
@@ -143,8 +144,9 @@ class Pattern:
       # add the substitute node (use the same node id as the first event of the pattern had)
       g.add_node(p[0])
 
-      g.node[p[0]]['event'] = None
+      g.node[p[0]]['event'] = self.event_label
       g.node[p[0]]['event_ids'] = p
+      g.node[p[0]]['dpid'] = dpid
       g.node[p[0]]['label'] = "%s \\n %s\\n DPID: %d" % (self.label, p[0], dpid)
       g.node[p[0]]['color'] = 'green'
 
@@ -161,12 +163,36 @@ class Pattern:
 class ControllerHandle(Pattern):
   """
   A controller handle consists of a HbPacketHandle event, followed by HbMessageSend, HbControllerHandle,
-  HbControllerSend and HbMessageHandle. Additionally, the HbPacketHandle and HbMessageHandle are connected
-  with a pid edge.
+  HbControllerSend and HbMessageHandle.
   """
 
   def __init__(self):
     label = 'ControllerHandle'
+    event_label = 'controller'
+    events = [hb_events.HbPacketHandle,
+              hb_events.HbMessageSend,
+              hb_events.HbControllerHandle,
+              hb_events.HbControllerSend,
+              hb_events.HbMessageHandle,
+              hb_events.HbPacketSend]
+
+    edges = [(0, 1, 'mid'),
+             (0, 4, 'pid'),
+             (1, 2, 'mid'),
+             (2, 3, 'mid'),
+             (3, 4, 'mid')]
+
+    Pattern.__init__(self, events, edges, label, event_label)
+
+
+class ControllerHandlePid(Pattern):
+  """
+  Same as 'ControllerHandle' but with pid edge between HbPacketHandle and HbMessageHandle.
+  """
+
+  def __init__(self):
+    label = 'ControllerHandle'
+    event_label = 'controller'
     events = [hb_events.HbPacketHandle,
               hb_events.HbMessageSend,
               hb_events.HbControllerHandle,
@@ -181,7 +207,7 @@ class ControllerHandle(Pattern):
              (3, 4, 'mid'),
              (4, 5, 'pid')]
 
-    Pattern.__init__(self, events, edges, label)
+    Pattern.__init__(self, events, edges, label, event_label)
 
 
 class SwitchTraversal(Pattern):
@@ -192,11 +218,10 @@ class SwitchTraversal(Pattern):
 
   def __init__(self):
     label = 'SwitchTraversal'
+    event_label = 'switch'
     events = [hb_events.HbPacketHandle,
               hb_events.HbPacketSend]
 
     edges = [(0, 1, 'pid')]
 
-    Pattern.__init__(self, events, edges, label)
-
-
+    Pattern.__init__(self, events, edges, label, event_label)

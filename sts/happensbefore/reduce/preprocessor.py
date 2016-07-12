@@ -1,10 +1,12 @@
 import logging
 import sys
+import time
 
 import networkx as nx
 
 import utils
 import pattern
+import hb_events
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,8 @@ class Preprocessor:
       for p in patterns:
         if p.strip().lower() == 'controllerhandle':
           self.patterns.append(pattern.ControllerHandle())
+        elif p.strip().lower() == 'controllerhandlepid':
+          self.patterns.append(pattern.ControllerHandlePid())
         elif p.strip().lower() == 'switchtraversal':
           self.patterns.append(pattern.SwitchTraversal())
         else:
@@ -39,9 +43,16 @@ class Preprocessor:
 
     """
     if self.extract:
+      logger.debug('Extract last controller action')
+      tstart = time.time()
       subgraphs = self.extract_last_controller_action(subgraphs)
+      logger.debug('Time: %f' % (time.time() - tstart))
+
     if self.patterns:
+      logger.debug('Detect and substitute patterns')
+      tstart = time.time()
       subgraphs = self.substitute_patterns(subgraphs)
+      logger.debug('Time: %f' % (time.time() - tstart))
 
     return subgraphs
 
@@ -64,35 +75,15 @@ class Preprocessor:
 
       # TODO: Rewrite with list comprehension -> should be faster
       # find the race events (one of them has to be the only node with no children)
-      race_i = None
-      for node_id in graph:
-        if not graph.successors(node_id):
-          race_i = node_id
-          break
+      no_successors = [x for x in graph.nodes() if not graph.successors(x)]
 
-      if not race_i:
-        logger.error("Did not find the last element in the graph")
-        sys.exit(-1)
-
-      # Find the other race event (only for graph verification, not necessary for program)
-      if "FlowTableWrite" in graph.node[race_i]['label']:
-        for pred in graph.predecessors(race_i):
-          if "FlowTableWrite" in graph.node[pred]['label'] or "FlowTableRead" in graph.node[pred]['label']:
-            race_k = pred
-            break
-
-      else:
-        for pred in graph.predecessors(race_i):
-          if "FlowTableWrite" in graph.node[pred]['label']:
-            race_k = pred
-            break
-
-      if not race_k:
-        logger.error("Did not find the second race event id")
-        sys.exit(-1)
+      # There have to be exactli two nodes with no successors, the race events
+      assert len(no_successors) == 2, 'Number of nodes with no successors not equal two.'
 
       # Find last controller handle for both events
-      nodes_to_keep = utils.find_last_controllerhandle(graph, race_i)
+      nodes_to_keep = []
+      nodes_to_keep.extend(utils.find_last_controllerhandle(graph, no_successors[0]))
+      nodes_to_keep.extend(utils.find_last_controllerhandle(graph, no_successors[1]))
 
       # Generate the new subgraph
       new_graph = nx.DiGraph(graph.subgraph(nodes_to_keep))
@@ -117,9 +108,62 @@ class Preprocessor:
       g = subg
       for p in self.patterns:
         g = p.find_pattern(g)
+
+        # Substitute multiple switch traversals
+        if isinstance(p, pattern.SwitchTraversal):
+          g = self.substitute_switchtraversal(g)
+
       new_subgraphs.append(g)
 
     return new_subgraphs
 
+  def substitute_switchtraversal(self, graph):
+    """
+    Substitute multiple switchtraversals in a row with a single dataplane traversal
+    """
+    # Put all root nodes on the stack
+    g = graph.copy()
+    stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+    visited = []
+    while stack:
+      curr_node = stack.pop()
+      # Only visit each node once
+      if curr_node in visited:
+        continue
+      else:
+        visited.append(curr_node)
 
+      if g.node[curr_node]['event'] == 'switch':
+        # prepare dataplane_traversal node
+        g.node[curr_node]['label'] = "%s \\n %s \\n DPID: %d" % ('DataplaneTraversal',
+                                                               curr_node, g.node[curr_node]['dpid'])
+        g.node[curr_node]['dpid'] = [g.node[curr_node]['dpid']]
+
+        # find all connected switch traversals
+        dataplane_traversal_nodes = []
+        next_node = curr_node
+        while len(g.successors(next_node)) == 1 and g.node[g.successors(next_node)[0]]['event'] == 'switch':
+          next_node = g.successors(next_node)[0]
+          dataplane_traversal_nodes.append(next_node)
+
+        # create edge
+        for suc in g.successors(next_node):
+          if not g.has_edge(curr_node, suc):
+            g.add_edge(curr_node, suc)
+            g.edge[curr_node][suc]['rel'] = g.edge[next_node][suc]['rel']
+          stack.append(suc)
+
+        # delete the nodes
+        for n in dataplane_traversal_nodes:
+          visited.append(n)
+          dpid = g.node[n]['dpid']
+          g.node[curr_node]['dpid'].append(dpid)
+          g.node[curr_node]['label'] += ", %d" % (g.node[n]['dpid'])
+          g.node[curr_node]['event_ids'].extend(g.node[n]['event_ids'])
+          g.remove_node(n)
+
+      else:
+        stack.extend(g.successors(curr_node))
+
+    return g
 

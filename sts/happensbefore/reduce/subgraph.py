@@ -91,10 +91,13 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
     subg = nx.DiGraph(cg.subgraph(nodes), race=race, index=ind)
     assert subg.graph['race'].i_event.eid in subg.nodes(), "x doesn't have i"
     assert subg.graph['race'].k_event.eid in subg.nodes(), "x doesn't have k"
+    subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
+    subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
+
     subgraphs.append(subg)
-    subg.add_edge(i, k, rel='race', harmful=True)
-    subg.edge[i][k]['color'] = 'red'
-    subg.edge[i][k]['style'] = 'bold'
+    #subg.add_edge(i, k, rel='race', harmful=True)
+    #subg.edge[i][k]['color'] = 'red'
+    #subg.edge[i][k]['style'] = 'bold'
 
     # Export subgraphs
     export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
