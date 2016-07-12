@@ -177,10 +177,10 @@ class ControllerHandle(Pattern):
               hb_events.HbPacketSend]
 
     edges = [(0, 1, 'mid'),
-             (0, 4, 'pid'),
              (1, 2, 'mid'),
              (2, 3, 'mid'),
-             (3, 4, 'mid')]
+             (3, 4, 'mid'),
+             (4, 5, 'pid')]
 
     Pattern.__init__(self, events, edges, label, event_label)
 
@@ -191,7 +191,7 @@ class ControllerHandlePid(Pattern):
   """
 
   def __init__(self):
-    label = 'ControllerHandle'
+    label = 'ControllerHandlePid'
     event_label = 'controller'
     events = [hb_events.HbPacketHandle,
               hb_events.HbMessageSend,

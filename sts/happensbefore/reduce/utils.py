@@ -10,7 +10,7 @@ import hb_events
 logger = logging.getLogger(__name__)
 
 
-def find_last_controllerhandle_old(graph, node):
+def find_last_controllerhandle(graph, node):
   """
   Traverses the graph upwards starting from node and returns list of all nodes up to the last controller handle
   including the packet out (HbPacketSend, HbHostSend or HbHostHandle) that led to this controller handle.
@@ -24,7 +24,7 @@ def find_last_controllerhandle_old(graph, node):
   """
 
   stack = [node]
-  nodes = [node]
+  nodes = []
 
   while stack:
     curr_node = stack.pop()
@@ -44,7 +44,7 @@ def find_last_controllerhandle_old(graph, node):
 
     nodes.append(curr_node)
 
-    if isinstance(graph.node[curr_controllerhandle]['event'], hb_events.HbControllerHandle):
+    if isinstance(graph.node[curr_node]['event'], hb_events.HbControllerHandle):
       # found the first controller handle in this branch
       stack_controllerhandle = graph.predecessors(curr_node)
       while stack_controllerhandle:

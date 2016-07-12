@@ -73,7 +73,6 @@ class Preprocessor:
     logger.info("Remove all events before the one that led to the last controller action for both race events.")
     for graph in subgraphs:
 
-      # TODO: Rewrite with list comprehension -> should be faster
       # find the race events (one of them has to be the only node with no children)
       no_successors = [x for x in graph.nodes() if not graph.successors(x)]
 
