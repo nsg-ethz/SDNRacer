@@ -72,17 +72,9 @@ class Preprocessor:
 
     logger.info("Remove all events before the one that led to the last controller action for both race events.")
     for graph in subgraphs:
-
-      # find the race events (one of them has to be the only node with no children)
-      no_successors = [x for x in graph.nodes() if not graph.successors(x)]
-
-      # There have to be exactli two nodes with no successors, the race events
-      assert len(no_successors) == 2, 'Number of nodes with no successors not equal two.'
-
       # Find last controller handle for both events
-      nodes_to_keep = []
-      nodes_to_keep.extend(utils.find_last_controllerhandle(graph, no_successors[0]))
-      nodes_to_keep.extend(utils.find_last_controllerhandle(graph, no_successors[1]))
+      # nodes_to_keep = utils.find_last_controllerhandle(graph)
+      nodes_to_keep = utils.find_last_sendevent(graph)
 
       # Generate the new subgraph
       new_graph = nx.DiGraph(graph.subgraph(nodes_to_keep))

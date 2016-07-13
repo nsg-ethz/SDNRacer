@@ -2,6 +2,7 @@
 
 import sys
 import os
+import shutil
 import ConfigParser
 import logging.config
 import argparse
@@ -24,6 +25,9 @@ class Reduce:
     self.resultdir = os.path.join(os.path.dirname(trace_file), 'reduce')
     if not os.path.exists(self.resultdir):
       os.makedirs(self.resultdir)
+    else:
+      shutil.rmtree(self.resultdir)
+      os.makedirs(self.resultdir)
 
     # Configure logger
     logdir = os.path.join(os.path.dirname(self.resultdir), 'log')
@@ -37,6 +41,7 @@ class Reduce:
     import preprocessor
     import cluster
     import subgraph
+    import utils
 
     # Parse config
     config = ConfigParser.RawConfigParser()
