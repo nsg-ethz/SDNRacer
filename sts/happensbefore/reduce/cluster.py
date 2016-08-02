@@ -16,7 +16,6 @@ class Cluster:
   def __init__(self, resultdir, iso=True, iso_comp=True):
     self.resultdir = resultdir
     self.iso = iso.lower() not in ['false', '0']  # convert from string 'false' or '0' to bool
-    self.iso_comp = iso_comp
 
   def run(self, subgraphs):
     # List of clusters, Each entry is a list of subgraphs in this cluster
@@ -31,15 +30,6 @@ class Cluster:
 
     utils.write_clusters_info(clusters)
     utils.export_cluster_graphs(clusters, self.resultdir, 'iso_cluster')
-    if self.iso_comp:
-      logger.debug("Cluster isomporphic components")
-      clusters = self.cluster_iso_race_parts(clusters)
-    else:
-      logger.debug("Skip isomporphic components clustering")
-
-    utils.write_clusters_info(clusters)
-
-    utils.export_cluster_graphs(clusters, self.resultdir)
 
     return clusters
 
@@ -89,77 +79,5 @@ class Cluster:
     # it returns True if two edges have the same relation
     return e1['rel'] == e2['rel']
 
-  def cluster_iso_race_parts(self, clusters):
-    """
-    Cluster graphs if parts of the subgraph are isomorphic, but only if the race event is a 'write'
-
-    Args:
-      clusters:
-
-    Returns:
-
-    """
-    # First split up the connected components of the subgraphs.
-    logger.debug("Cluster based on isomorphic components")
-    tstart = time.time()
-    subgraphs = []
-    new_clusters = clusters[:]
-
-    for ind, cluster in enumerate(clusters):
-      components = nx.weakly_connected_components(cluster[0])  # Only consider first graph of the cluster
-
-      if len(components) == 1:
-        # In this case all nodes are connected
-        logger.debug("Only one component in cluster %s" % ind)
-        subgraphs.append([cluster[0], None])
-      elif len(components) == 2:
-        # The two race events are not connected -> generate two new graphs.
-        g1 = nx.DiGraph(cluster[0].subgraph(components[0]))
-        g2 = nx.DiGraph(cluster[0].subgraph(components[1]))
-
-        if not utils.has_write_event(g1):
-          g1 = None
-        if not utils.has_write_event(g2):
-          g2 = None
-
-        subgraphs.append([g1, g2])
-      else:
-        # This case should not exist
-        raise RuntimeError('cluster_iso_race_parts: More than two components exist.')
-
-    tcomp = time.time()
-    logger.debug("Created components in %f s" % (tcomp - tstart))
-
-    # Find isomorphic parts
-    # Try to add the smallest clusters to the biggest first
-    for i in xrange(len(subgraphs) - 1, 0, -1):
-      iso = None
-      for k in xrange(0, i):
-        assert k < i, "k bigger than i"
-
-        # For all combination of the components
-        for g1, g2 in itertools.product(subgraphs[i], subgraphs[k]):
-          if g1 and g2 and nx.is_isomorphic(g1, g2, node_match=self.node_match, edge_match=self.edge_match):
-            iso = k
-            break
-        if iso is not None:
-          break
-
-      if iso is not None:
-        new_clusters[iso].extend(new_clusters[i])
-        new_clusters[i] = None
-
-    tiso = time.time()
-    logger.debug("Checked all components in %f s" % (tiso - tcomp))
-
-    # remove the empty clusters
-    new_clusters = [x for x in new_clusters if x]
-    new_clusters.sort(key=len, reverse=True)
-
-    logger.debug("Finished cluster based on isomorphic components in %f s" % (time.time() - tstart))
-    logger.debug("Clusters before iso components: %d" % len(clusters))
-    logger.debug("Clusters after iso components:  %d" % len(new_clusters))
-
-    return new_clusters
 
 

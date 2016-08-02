@@ -74,7 +74,7 @@ class Preprocessor:
     for graph in subgraphs:
       # Find last controller handle for both events
       # nodes_to_keep = utils.find_last_controllerhandle(graph)
-      nodes_to_keep = utils.find_last_sendevent(graph)
+      nodes_to_keep = utils.find_last_controllerhandle(graph)
 
       # Generate the new subgraph
       new_graph = nx.DiGraph(graph.subgraph(nodes_to_keep))

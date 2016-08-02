@@ -41,13 +41,14 @@ class Reduce:
     import preprocessor
     import cluster
     import subgraph
+    import rank
     import utils
 
     # Parse config
     config = ConfigParser.RawConfigParser()
     config.read(os.path.dirname(__file__) + '/config.ini')
 
-    # Create Clustering object if not disabled
+    # Prepare clustering
     if not config.getboolean('general', 'no_cluster'):
       if config.has_section('cluster'):
         clusterargs = dict(config.items('cluster'))
@@ -58,7 +59,7 @@ class Reduce:
     else:
       self.cluster = None
 
-    # Create Preprocessor Object if not disabled
+    # Prepare preprocessor
     if not config.getboolean('general', 'no_preprocess'):
       if config.has_section('preprocessor'):
         prepargs = dict(config.items('preprocessor'))
@@ -68,6 +69,12 @@ class Reduce:
       self.preprocessor = preprocessor.Preprocessor(**prepargs)
     else:
       self.preprocessor = None
+
+    # prepare ranking
+    assert config.has_section('rank'), 'Missing configuration group "rank"'
+    rankargs = dict(config.items('rank'))
+
+    self.ranking = rank.Rank(**rankargs)
 
     # graph data
     self.hb_graph = hb_graph
@@ -137,24 +144,29 @@ class Reduce:
 
     ####################################################################################################################
     # Print preprocessed subgraphs
-    for ind, g in enumerate(self.subgraphs):
-      export_path = os.path.join(self.resultdir, "subg_%03d_preprocessed.dot" % ind)
-      nx.write_dot(g, export_path)
-
+    # for ind, g in enumerate(self.subgraphs):
+    #   export_path = os.path.join(self.resultdir, "subg_%03d_preprocessed.dot" % ind)
+    #   nx.write_dot(g, export_path)
+    #
     ####################################################################################################################
-
 
     # Clustering
     if self.cluster:
       self.logger.info("Start clustering...")
-      self.cluster.run(self.subgraphs)
+      clusters = self.cluster.run(self.subgraphs)
       self.logger.info("Finished clustering")
+    else:
+      clusters = [[subg] for subg in self.subgraphs]
 
-    # Results
+    # Ranking
+    self.logger.info("Start ranking...")
+    self.ranking.run(clusters)
+    self.logger.info("Finished ranking")
 
 
 def auto_int(x):
   return int(x, 0)
+
 
 if __name__ == '__main__':
   # First call hb_graph.py and provide the same parameters
@@ -206,13 +218,13 @@ if __name__ == '__main__':
       args.rw_delta = args.ww_delta = args.delta
 
   m = hb_graph.Main(args.trace_file, print_pkt=args.print_pkt,
-              add_hb_time=not args.no_hbt, rw_delta=args.rw_delta, ww_delta=args.ww_delta,
-              filter_rw=args.filter_rw, ignore_ethertypes=args.ignore_ethertypes,
-              no_race=args.no_race, alt_barr=args.alt_barr, verbose=args.verbose,
-              ignore_first=args.ignore_first, disable_path_cache=args.disable_path_cache,
-              data_deps=args.data_deps, no_dot_files=args.no_dot_files,
-              verify_and_minimize_only=args.verify_and_minimize_only,
-              is_minimized=args.is_minimized)
+                    add_hb_time=not args.no_hbt, rw_delta=args.rw_delta, ww_delta=args.ww_delta,
+                    filter_rw=args.filter_rw, ignore_ethertypes=args.ignore_ethertypes,
+                    no_race=args.no_race, alt_barr=args.alt_barr, verbose=args.verbose,
+                    ignore_first=args.ignore_first, disable_path_cache=args.disable_path_cache,
+                    data_deps=args.data_deps, no_dot_files=args.no_dot_files,
+                    verify_and_minimize_only=args.verify_and_minimize_only,
+                    is_minimized=args.is_minimized)
   m.run()
 
   r = Reduce(m.graph, args.trace_file)
