@@ -42,7 +42,6 @@ class Reduce:
     import cluster
     import subgraph
     import rank
-    import utils
 
     # Parse config
     config = ConfigParser.RawConfigParser()
@@ -74,7 +73,7 @@ class Reduce:
     assert config.has_section('rank'), 'Missing configuration group "rank"'
     rankargs = dict(config.items('rank'))
 
-    self.ranking = rank.Rank(**rankargs)
+    self.ranking = rank.Rank(self.resultdir, **rankargs)
 
     # graph data
     self.hb_graph = hb_graph

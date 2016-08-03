@@ -13,6 +13,31 @@ import hb_sts_events
 logger = logging.getLogger(__name__)
 
 
+def find_first_controllerhandle(graph):
+  """
+  Traverses the graph and returns list of all nodes above the first packet out which caused a controller handle.
+
+  Args:
+    graph: graph
+
+  Returns: List of nodes which can be removed from the graph
+
+  """
+
+  # get all root nodes
+  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+
+  nodes = []
+
+  while stack:
+    curr_node = stack.pop()
+
+    # If the current node is a packet out -> check if it leads to a controller handle
+    if (isinstance(graph.node[curr_node]['event'], hb_events.HbHostSend) or
+        isinstance(graph.node[curr_node]['event'], hb_events.HbPacketSend)):
+      pass
+
+
 def find_last_controllerhandle(graph):
   """
   Traverses the graph upwards starting from node and returns list of all nodes up to the last controller handle
@@ -68,56 +93,6 @@ def find_last_controllerhandle(graph):
       stack.extend(graph.predecessors(curr_node))
 
   return nodes
-
-
-def export_cluster_graphs(clusters, resultdir, prefix='cluster', export_overview=False):
-  """
-  Export the first graph of each cluster as .dot file.
-  Args:
-    clusters:   List of clusters
-    resultdir:  Directory where to safe the graphs
-    prefix:     Prefix of the exportet file names (default='cluster')
-    export_overview:   Boolean which indicates if an overview should be exportet as well, attention: SLOW (default=False)
-
-  """
-  # Export a graph of each cluster and "overview" of clusters (one graph of each cluster)
-  overview = []
-  for ind, cluster in enumerate(clusters):
-    export_path = os.path.join(resultdir, "%s_%03d.dot" % (prefix, ind))
-    nx.write_dot(cluster[0], export_path)
-    overview.append(cluster[0])
-
-  # Export overview of all clusters
-  if export_overview:
-    export_path = os.path.join(resultdir, "%s_clusters_overview.dot" % prefix)
-    nx.write_dot(nx.disjoint_union_all(overview), export_path)
-
-
-def write_clusters_info(clusters, indent=True):
-  """
-  Writes the size of each cluster to the log (grouped by size).
-  Args:
-    clusters: List of clusters
-    indent:   Boolean, indicates if the entries should be indented by a tab.
-  """
-  # First write the number of subgraphs and the number of clusters
-  num_cluster = len(clusters)
-  num_subgraphs = sum([len(x) for x in clusters])
-  logger.debug("%sTotal Clusters: %d, Total Subgraphs: %d" % (indent, num_cluster, num_subgraphs))
-  curr_size = sys.maxint
-  start_ind = 0
-  if indent:
-    indent = "\t"
-  else:
-    indent = ""
-  for ind, cluster in enumerate(clusters):
-    if len(cluster) < curr_size:
-      if not ind == 0:
-        logger.debug("%sCluster %5d - %5d: %5d graphs each" % (indent, start_ind, ind - 1, curr_size))
-      curr_size = len(cluster)
-      start_ind = ind
-
-  logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(clusters) - 1, len(clusters[-1])))
 
 
 def has_write_event(graph):

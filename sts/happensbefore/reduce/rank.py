@@ -1,5 +1,6 @@
 import logging.config
 import time
+import os
 import networkx as nx
 
 import utils
@@ -26,7 +27,8 @@ class Rank:
   Class to rank graphs/clusters and put them in the different rank groups.
   """
 
-  def __init__(self, max_groups=5, score_same_write=1, score_iso_branch=1, threshold=1):
+  def __init__(self, resultdir, max_groups=5, score_same_write=1, score_iso_branch=1, threshold=1):
+    self.resultdir = resultdir
     self.max_groups = int(max_groups)
     self.score_iso_branch = float(score_iso_branch)
     self.score_same_write = float(score_same_write)
@@ -37,7 +39,7 @@ class Rank:
   def run(self, clusters):
     # Put the biggest cluster in the first group
     while len(clusters) > 0 and len(self.groups) < self.max_groups:
-      sorted(clusters, key=len, reverse=True)
+      clusters.sort(key=len, reverse=True)
       self.groups.append(RankGroup(clusters[0][0], clusters[0]))
       logger.debug("Group %2d" % len(self.groups))
       clusters.remove(clusters[0])
@@ -67,8 +69,8 @@ class Rank:
         ind += 1
 
     # Sort the groups based on the number of graphs in them
-    sorted(self.groups, key=lambda x: len(x.graphs), reverse=True)
-
+    self.groups.sort(key=lambda x: len(x.graphs), reverse=True)
+    self.export_groups(self.resultdir)
     # Print group info
     logger.info("Time information grouping:")
     logger.info("\t Iso branches: %f" % tiso)
@@ -182,6 +184,13 @@ class Rank:
         break
 
     return score
+
+  def export_groups(self, resultdir):
+    for ind, group in enumerate(self.groups):
+      export_path = os.path.join(self.resultdir, 'groups')
+      if not os.path.exists(export_path):
+        os.makedirs(export_path)
+      nx.write_dot(group.repre, os.path.join(export_path, 'representative_%03d.dot' % ind))
 
 
 

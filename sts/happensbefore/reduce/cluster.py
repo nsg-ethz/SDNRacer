@@ -1,11 +1,8 @@
 import logging.config
 import time
-import itertools
+import os
+import sys
 import networkx as nx
-
-import utils
-import hb_events
-import hb_sts_events
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +10,7 @@ logger = logging.getLogger(__name__)
 class Cluster:
   # functions to cluster subgraphs
 
-  def __init__(self, resultdir, iso=True, iso_comp=True):
+  def __init__(self, resultdir, iso=True):
     self.resultdir = resultdir
     self.iso = iso.lower() not in ['false', '0']  # convert from string 'false' or '0' to bool
 
@@ -28,8 +25,8 @@ class Cluster:
     else:
       logger.debug("Skip Isomorphic clustering")
 
-    utils.write_clusters_info(clusters)
-    utils.export_cluster_graphs(clusters, self.resultdir, 'iso_cluster')
+    self.write_clusters_info(clusters)
+    self.export_cluster_graphs(clusters, 'iso_cluster')
 
     return clusters
 
@@ -79,5 +76,50 @@ class Cluster:
     # it returns True if two edges have the same relation
     return e1['rel'] == e2['rel']
 
+  def export_cluster_graphs(self, clusters, prefix='cluster', export_overview=False):
+    """
+    Export the first graph of each cluster as .dot file.
+    Args:
+      clusters:   List of clusters
+      prefix:     Prefix of the exportet file names (default='cluster')
+      export_overview:   Boolean which indicates if an overview should be exportet as well, attention: SLOW (default=False)
 
+    """
+    # Export a graph of each cluster and "overview" of clusters (one graph of each cluster)
+    overview = []
+    for ind, cluster in enumerate(clusters):
+      export_path = os.path.join(self.resultdir, "%s_%03d.dot" % (prefix, ind))
+      nx.write_dot(cluster[0], export_path)
+      overview.append(cluster[0])
+
+    # Export overview of all clusters
+    if export_overview:
+      export_path = os.path.join(self.resultdir, "%s_clusters_overview.dot" % prefix)
+      nx.write_dot(nx.disjoint_union_all(overview), export_path)
+
+  def write_clusters_info(self, clusters, indent=True):
+    """
+    Writes the size of each cluster to the log (grouped by size).
+    Args:
+      clusters: List of clusters
+      indent:   Boolean, indicates if the entries should be indented by a tab.
+    """
+    # First write the number of subgraphs and the number of clusters
+    num_cluster = len(clusters)
+    num_subgraphs = sum([len(x) for x in clusters])
+    logger.debug("%sTotal Clusters: %d, Total Subgraphs: %d" % (indent, num_cluster, num_subgraphs))
+    curr_size = sys.maxint
+    start_ind = 0
+    if indent:
+      indent = "\t"
+    else:
+      indent = ""
+    for ind, cluster in enumerate(clusters):
+      if len(cluster) < curr_size:
+        if not ind == 0:
+          logger.debug("%sCluster %5d - %5d: %5d graphs each" % (indent, start_ind, ind - 1, curr_size))
+        curr_size = len(cluster)
+        start_ind = ind
+
+    logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(clusters) - 1, len(clusters[-1])))
 

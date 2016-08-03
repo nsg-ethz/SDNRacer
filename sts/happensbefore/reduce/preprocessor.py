@@ -1,12 +1,10 @@
 import logging
-import sys
 import time
 
 import networkx as nx
 
 import utils
 import pattern
-import hb_events
 
 logger = logging.getLogger(__name__)
 
