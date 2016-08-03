@@ -70,7 +70,7 @@ class Rank:
 
     # Sort the groups based on the number of graphs in them
     self.groups.sort(key=lambda x: len(x.graphs), reverse=True)
-    self.export_groups(self.resultdir)
+    self.export_groups()
     # Print group info
     logger.info("Time information grouping:")
     logger.info("\t Iso branches: %f" % tiso)
@@ -185,7 +185,7 @@ class Rank:
 
     return score
 
-  def export_groups(self, resultdir):
+  def export_groups(self):
     for ind, group in enumerate(self.groups):
       export_path = os.path.join(self.resultdir, 'groups')
       if not os.path.exists(export_path):

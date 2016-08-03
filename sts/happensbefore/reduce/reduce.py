@@ -6,9 +6,6 @@ import shutil
 import ConfigParser
 import logging.config
 import argparse
-import time
-
-import networkx as nx
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
 import hb_graph

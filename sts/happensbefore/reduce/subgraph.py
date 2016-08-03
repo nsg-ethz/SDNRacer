@@ -5,8 +5,6 @@ import time
 import logging
 import networkx as nx
 
-import hb_events
-
 # create logger
 logger = logging.getLogger(__name__)
 
@@ -95,11 +93,6 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
     assert subg.graph['race'].k_event.eid in subg.nodes(), "x doesn't have k"
     subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
     subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
-
-    # Remove dispensable pid edges
-    tpidedges = time.time()
-    remove_dispensable_pid_edges(subg)
-    logger.debug("Time remove pid_edges: %f s" % (time.time() - tpidedges))
 
     subgraphs.append(subg)
     # subg.add_edge(i, k, rel='race', harmful=True)
@@ -215,59 +208,5 @@ def remove_dispensable_nodes(hb_graph, race_ids):
   logger.debug("Total nodes after removal: %d" % hb_graph.number_of_nodes())
 
   return hb_graph
-
-
-def remove_dispensable_pid_edges(graph):
-  """
-  Removes pid edges between two events if there is another patch via the controller.
-  Args:
-    graph: graph to check
-
-  Returns:
-    graph without the pid edges
-  """
-  # get all root nodes
-  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-
-  while stack:
-    curr_node = stack.pop()
-
-    # Check if there are two successors
-    suc = graph.successors(curr_node)
-    if not len(suc) == 2:
-      stack.extend(suc)
-      continue
-
-    else:
-      # Check if one edge is 'mid' and the other 'pid'
-      if (graph.edge[curr_node][suc[0]]['rel'] == 'mid' and
-          graph.edge[curr_node][suc[1]]['rel'] == 'pid'):
-        mid_node = suc[0]
-        pid_node = suc[1]
-
-      elif (graph.edge[curr_node][suc[0]]['rel'] == 'pid' and
-            graph.edge[curr_node][suc[1]]['rel'] == 'mid'):
-        mid_node = suc[1]
-        pid_node = suc[0]
-
-      else:
-        # not dispensable edge -> continue with the next nodes
-        stack.extend(suc)
-        continue
-
-      # Check if the longer path is MessageSend -> ControllerHandle -> ControllerSend and to node after is the node
-      # where the pid edge ends
-      if isinstance(graph.node[mid_node]['event'], hb_events.HbMessageSend):
-        n = graph.successors(mid_node)
-        if len(n) == 1 and isinstance(graph.node[n[0]]['event'], hb_events.HbControllerHandle):
-          n = graph.successors(n[0])
-          if len(n) == 1 and isinstance(graph.node[n[0]]['event'], hb_events.HbControllerSend):
-            n = graph.successors(n[0])
-            if len(n) == 1 and n[0] == pid_node:
-              # In this case, the pid-edge is dispensable
-              graph.remove_edge(curr_node, pid_node)
-              stack.append(pid_node)
-
-  return graph
 
 
