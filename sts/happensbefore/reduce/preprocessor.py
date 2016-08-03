@@ -34,12 +34,6 @@ class Preprocessor:
       subgraphs = self.remove_dispensable_pid_edges(subgraphs)
       logger.debug('Time: %f' % (time.time() - tstart))
 
-    if self.extract:
-      logger.debug('Extract last controller action')
-      tstart = time.time()
-      subgraphs = self.extract_last_controller_action(subgraphs)
-      logger.debug('Time: %f' % (time.time() - tstart))
-
     if self.substitute:
       logger.debug('Detect and substitute patterns')
       tstart = time.time()
@@ -47,32 +41,6 @@ class Preprocessor:
       logger.debug('Time: %f' % (time.time() - tstart))
 
     return subgraphs
-
-  def extract_last_controller_action(self, subgraphs):
-    """
-    only keeps nodes from the race events up to the last packet send that required controller action
-
-    Args:
-      subgraphs: List of graphs
-
-    Returns:
-      new list of preprocessed subgraphs
-
-    """
-
-    new_subgraphs = []
-
-    logger.info("Remove all events before the one that led to the last controller action for both race events.")
-    for graph in subgraphs:
-      # Find last controller handle for both events
-      # nodes_to_keep = utils.find_last_controllerhandle(graph)
-      nodes_to_keep = utils.find_last_controllerhandle(graph)
-
-      # Generate the new subgraph
-      new_graph = nx.DiGraph(graph.subgraph(nodes_to_keep))
-      new_subgraphs.append(new_graph)
-
-    return new_subgraphs
 
   def substitute_patterns(self, subgraphs):
     """
@@ -135,8 +103,7 @@ class Preprocessor:
         # First redirect outgoing edges to the first node of the ControllerHandle
         for s in suc:
           for n in graph.successors(s):
-            graph.add_edge(pre[0], n)
-            graph.edge[pre[0]][n]['rel'] = graph.edge[s][n]['rel']
+            graph.add_edge(pre[0], n, graph.edge[s][n])
             # add them to the stack
             stack.append(n)
 
@@ -197,8 +164,7 @@ class Preprocessor:
         if ids:
           # Redirect edges
           for s in graph.successors(ids[-1]):
-            graph.add_edge(ids[0], s)
-            graph.edge[ids[0]][s]['rel'] = graph.edge[ids[-1]][s]['rel']
+            graph.add_edge(ids[0], s, graph.edge[ids[-1]][s])
 
           # Modify first node to hold all needed information
           graph.node[ids[0]]['event'] = 'DataplaneTraversal'

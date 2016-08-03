@@ -41,7 +41,6 @@ class Rank:
     while len(clusters) > 0 and len(self.groups) < self.max_groups:
       clusters.sort(key=len, reverse=True)
       self.groups.append(RankGroup(clusters[0][0], clusters[0]))
-      logger.debug("Group %2d" % len(self.groups))
       clusters.remove(clusters[0])
 
       # Calculate score
@@ -62,7 +61,6 @@ class Rank:
       # add clusters to group, remove them from clusters
       ind = 0
       for cluster, score in scores:
-        logger.debug("\tCluster %4d: Score %4.2f" % (ind, score / float(len(cluster))))
         if score / float(len(cluster)) > self.threshold:
           cur_group.graphs.extend(cluster)
           clusters.remove(cluster)
