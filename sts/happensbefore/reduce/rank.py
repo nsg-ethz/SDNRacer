@@ -1,6 +1,7 @@
 import logging.config
 import time
 import os
+import sys
 import networkx as nx
 
 import utils
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RankGroup:
-  def __init__(self, repre, graphs, pingpong, nodataplane):
+  def __init__(self, repre, cluster, pingpong, nodataplane, single_send):
     """
     Class to store the rank groups (group of subgraphs). Each group has a score, representative graph to show to the user
     and a list of all clusters contained in the group.
@@ -20,9 +21,15 @@ class RankGroup:
       graphs: List of all graphs in this group
     """
     self.repre = repre                    # Representative Graph
-    self.graphs = graphs                  # All clusters/Graphs
+    self.clusters = [cluster]              # All clusters/Graphs
+    self.num_graphs = len(cluster)
     self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
     self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
+    self.single_send = single_send        # Indicates if the race is caused by a single send
+
+  def add_cluster(self, cluster):
+    self.clusters.append(cluster)
+    self.num_graphs += len(cluster)
 
 
 class Rank:
@@ -35,6 +42,7 @@ class Rank:
                score_iso_branch=1,
                score_iso_nodataplane=1,
                score_iso_pingpong=1,
+               score_single_send=1,
                threshold=1):
     self.resultdir = resultdir
     self.max_groups = int(max_groups)
@@ -42,105 +50,156 @@ class Rank:
     self.score_same_write = float(score_same_write)
     self.score_iso_nodataplane = float(score_iso_nodataplane)
     self.score_iso_pingpong = float(score_iso_pingpong)
+    self.score_single_send = float(score_single_send)
     self.threshold = float(threshold)
     self.num_groups = 0
     self.groups = []
 
   def run(self, clusters):
-    # Put the biggest cluster in the first group
-    t_total = time.time()
-    t_total_group = 0
-    t_total_iso = 0
-    t_total_dataplane = 0
-    t_total_pingpong = 0
-    t_total_write = 0
-    while len(clusters) > 0 and len(self.groups) < self.max_groups:
-      ttot = time.time()
-      tstart = time.time()
-      clusters.sort(key=len, reverse=True)
-      c = clusters[0]
-      r = clusters[0][0]
+    logger.info("Start Ranking")
+    tstart = time.time()
+    # Generate Groups
+    # cluster list to store all scores and to which group they are assignes
+    # Form: {'cluster': list_of_graphs, 'group': group_number, 'scores': [score_group_1, score_group_2, ...]}
+    clusters.sort(key=len, reverse=True)
+    cluster_scores = []
+    for c in clusters:
+      cluster_dict = {'cluster': c,
+                      'pingpong': self.substitute_pingpong(c[0]),
+                      'nodataplane': self.remove_dataplanetraversals(c[0]),
+                      'group': None,
+                      'scores': [None] * self.max_groups}
+      cluster_scores.append(cluster_dict)
+
+    tdict = time.time()
+
+    # First generate self.max_groups groups
+    # Approach:
+    #   - Put the first cluster (biggest) in the first group
+    #   - Calculate score of all other clusters for this group
+    #   - Put biggest cluster with smallest score in new group
+    #   - Repeat until all groups are created
+    #   Note: in repetive steps, use biggest cluster with lowest score for all groups
+    logger.info("Generate Groups")
+    cluster_ind = 0
+
+    while len(self.groups) < self.max_groups:
+      logger.debug("Generate group %d" % len(self.groups))
+      # Generate next group
+      c = cluster_scores[cluster_ind]['cluster']
+      r = c[0]
       pingpong = self.substitute_pingpong(r)
       nodataplane = self.remove_dataplanetraversals(r)
-      self.groups.append(RankGroup(r, c, pingpong, nodataplane))
-      clusters.remove(clusters[0])
-      tgroup = time.time() - tstart
-      t_total_group += tgroup
+      single_send = self.is_caused_by_single_send(r)
+      cur_group = len(self.groups)
+      self.groups.append(RankGroup(r, c, pingpong, nodataplane, single_send))
+      cluster_scores[cluster_ind]['group'] = cur_group
 
-      # Calculate score
-      cur_group = self.groups[-1]
-      scores = []
-      tiso = 0
-      twrite = 0
-      tdataplane = 0
-      tpingpong = 0
-      for ind, cluster in enumerate(clusters):
-        score = 0
+      # Calculate the score for all other clusters
+      for ind, cluster_dict in enumerate(cluster_scores):
+        # Only continue if the current cluster is not assigned yet
+        if cluster_dict['group'] is None:
+          score = self.calculate_score(self.groups[cur_group],
+                                       cluster_dict['cluster'],
+                                       cluster_dict['pingpong'],
+                                       cluster_dict['nodataplane'])
+          cluster_dict['scores'][cur_group] = score
 
-        # Isomorphic parts
-        tstart = time.time()
-        score += self.iso_branch(cur_group, cluster)
-        tiso += time.time() - tstart
+      # Get biggest cluster with lowest overall score
+      min_score = sys.maxint
+      cluster_ind = None
+      for ind, cluster_dict in enumerate(cluster_scores):
+        # Only consider unassigned clusters
+        if cluster_dict['group'] is not None:
+          continue
 
-        # Same write event
-        tstart = time.time()
-        score += self.same_write_event(cur_group, cluster)
-        twrite += time.time() - tstart
+        # Get score, Ignore scores for groups which are not calculated yet
+        score = sum([x for x in cluster_dict['scores'] if x is not None])
 
-        # Isomorphic without dataplane traversal
-        tstart = time.time()
-        score += self.iso_no_dataplane(cur_group, cluster)
-        tdataplane += time.time() - tstart
+        # Clusters are ordered in size, so the first graph with the smallest score is always the biggest
+        if score == 0:
+          cluster_ind = ind
+          min_score = 0
+          break
 
-        # Isomorphic with reduced controller switch pingpong
-        tstart = time.time()
-        score += self.iso_substituted_pingpong(cur_group, cluster)
-        tpingpong += time.time() - tstart
+        elif score < min_score:
+          min_score = score
+          cluster_ind = ind
 
-        scores.append([cluster, score])
+      logger.debug("\tLowest: Cluster %d, Score %f (%s)" % (cluster_ind, min_score, cluster_scores[cluster_ind]['scores']))
 
-      # Timing
-      t_total_iso += tiso
-      t_total_write += twrite
-      t_total_dataplane += tdataplane
-      t_total_pingpong += tpingpong
+    tgroup = time.time()
+    logger.info("Assign clusters to groups")
 
-      # add clusters to group, remove them from clusters
-      ind = 0
-      for cluster, score in scores:
-        if score / float(len(cluster)) > self.threshold:
-          cur_group.graphs.extend(cluster)
-          clusters.remove(cluster)
-        ind += 1
+    # Now calculate the score for all clusters and groups
+    remaining = []
+    num_graphs = 0
+    for cluster_dict in cluster_scores:
+      # Only calculate score if not already assigned
+      if cluster_dict['group'] is None:
+        for ind in range(0, len(self.groups)):
+          if cluster_dict['scores'][ind] is None:
+            cluster_dict['scores'][ind] = self.calculate_score(self.groups[ind],
+                                                               cluster_dict['cluster'],
+                                                               cluster_dict['pingpong'],
+                                                               cluster_dict['nodataplane'])
 
-      # Log group timing
-      logger.debug("Timing group %d:" % (len(self.groups) - 1))
-      logger.debug("\t Create Groupe: %8.3f s" % tgroup)
-      logger.debug("\t Iso Branches:  %8.3f s" % tiso)
-      logger.debug("\t Same write:    %8.3f s" % twrite)
-      logger.debug("\t Iso no datapl: %8.3f s" % tdataplane)
-      logger.debug("\t Iso pingpong:  %8.3f s" % tpingpong)
-      logger.debug("\t TOTAL:         %8.3f s" % (time.time() - ttot))
+        # If a cluster has score 0 for all groups -> put it in "Remaining"
+        if sum(cluster_dict['scores']) == 0:
+          remaining.append(cluster_dict['cluster'])
+          num_graphs += len(cluster_dict['cluster'])
 
-    # Sort the groups based on the number of graphs in them
-    self.groups.sort(key=lambda x: len(x.graphs), reverse=True)
+        # Now assign the cluster to the group with the highest score
+        # (take the first if there are multiple with the same score)
+        max_score_ind = cluster_dict['scores'].index(max(cluster_dict['scores']))
+        cluster_dict['group'] = max_score_ind
+        self.groups[max_score_ind].add_cluster(cluster_dict['cluster'])
+
+    logger.info("Export Graphs")
+    tassign = time.time()
+
+    self.groups.sort(key=lambda x: len(x.clusters), reverse=True)
     self.export_groups()
 
-    # Print group info
-    logger.info("Time information grouping:")
-    logger.info("\t Create Groups: %f s" % t_total_group)
-    logger.info("\t Iso branches:  %f s" % t_total_iso)
-    logger.info("\t Same writes:   %f s" % t_total_write)
-    logger.debug("\t Iso no datapl:%f s" % t_total_dataplane)
-    logger.debug("\t Iso pingpong: %f s" % t_total_pingpong)
-    logger.info("\t TOTAL:         %f s" % (time.time() - t_total))
-    for ind, group in enumerate(self.groups):
-      logger.info("Group %3d: %3d Graphs" % (ind, len(group.graphs)))
+    texport = time.time()
 
-    rem_graphs = 0
-    for g in clusters:
-      rem_graphs += len(g)
-    logger.info("Remaining: %d clusters, %d graphs" % (len(clusters), rem_graphs))
+    logger.info("Finished ranking")
+
+    self.print_scoredict(cluster_scores)
+
+    logger.info("Summary:")
+    for ind, g in enumerate(self.groups):
+      logger.info("\tGroup %s: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
+    logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(remaining), num_graphs))
+    logger.info("Timing:")
+    logger.info("\tBuild score dict:     %10.3f s" % (tdict - tstart))
+    logger.info("\tGenerate groups:      %10.3f s" % (tgroup - tdict))
+    logger.info("\tCalc. score & assign: %10.3f s" % (tassign - tgroup))
+    logger.info("\tExport groups:        %10.3f s" % (texport - tassign))
+    logger.info("\tTOTAL:                %10.3f s" % (texport - tstart))
+
+  def calculate_score(self, group, cluster, pingpong=None, nodataplane=None):
+    """
+    Calculates the likeliness score of cluster to be in group.
+    """
+    score = 0
+
+    # Isomorphic parts
+    score += self.iso_branch(group, cluster)
+
+    # Same write event
+    score += self.same_write_event(group, cluster)
+
+    # Caused by single send
+    score += self.get_score_single_send(group, cluster)
+
+    # Isomorphic without dataplane traversal
+    score += self.iso_no_dataplane(group, cluster, nodataplane)
+
+    # Isomorphic with reduced controller switch pingpong
+    score += self.iso_substituted_pingpong(group, cluster, pingpong)
+
+    return score
 
   def iso_branch(self, group, cluster):
     """
@@ -154,14 +213,19 @@ class Rank:
     Returns:
       score
     """
-    graph = cluster[0]
+    return self.score_iso_branch if self.iso_components(cluster[0], group.repre) else 0
+
+  def iso_components(self, graph1, graph2):
+    """
+    Return True if any components of the graph are isomorphic.
+    """
     # Split the graph
-    components = nx.weakly_connected_components(graph)
+    components = nx.weakly_connected_components(graph1)
 
     if len(components) == 2:
       # Only interesting if the graph has two separate branches
-      g1 = nx.DiGraph(graph.subgraph(components[0]))
-      g2 = nx.DiGraph(graph.subgraph(components[1]))
+      g1 = nx.DiGraph(graph1.subgraph(components[0]))
+      g2 = nx.DiGraph(graph1.subgraph(components[1]))
 
       # Only consider "write branches"
       if not utils.has_write_event(g1):
@@ -173,12 +237,12 @@ class Rank:
       g2 = None
 
     # Split the representative graph
-    components = nx.weakly_connected_components(group.repre)  # Only consider first graph of the cluster
+    components = nx.weakly_connected_components(graph2)  # Only consider first graph of the cluster
 
     if len(components) == 2:
       # Only interesting if the graph has two separate branches
-      r1 = nx.DiGraph(group.repre.subgraph(components[0]))
-      r2 = nx.DiGraph(group.repre.subgraph(components[1]))
+      r1 = nx.DiGraph(graph2.subgraph(components[0]))
+      r2 = nx.DiGraph(graph2.subgraph(components[1]))
 
       # Only consider "write branches"
       if not utils.has_write_event(r1):
@@ -200,7 +264,7 @@ class Rank:
     elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=self.node_match, edge_match=self.edge_match):
       iso = True
 
-    return self.score_iso_branch * len(cluster) if iso else 0
+    return iso
 
   def node_match(self, n1, n2):
     # it returns True if two nodes have the same event type
@@ -224,11 +288,12 @@ class Rank:
 
     # Get the event ids of all write events in the group
     write_ids = []
-    for graph in group.graphs:
-      # get leaf nodes
-      for node in (x for x in graph.nodes() if not graph.successors(x)):
-        if utils.is_write_event(node, graph):
-          write_ids.append(node)
+    for cluster in group.clusters:
+      for graph in cluster:
+        # get leaf nodes
+        for node in (x for x in graph.nodes() if not graph.successors(x)):
+          if utils.is_write_event(node, graph):
+            write_ids.append(node)
 
     # check how many graphs of the cluster have a write event in common with the group
     score = 0
@@ -242,7 +307,7 @@ class Rank:
       if common_write:
         break
 
-    return score
+    return score / float(len(cluster))
 
   def export_groups(self):
     for ind, group in enumerate(self.groups):
@@ -253,26 +318,52 @@ class Rank:
       nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
       nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
 
-  def iso_no_dataplane(self, cur_group, cluster):
+  def iso_no_dataplane(self, cur_group, cluster, nodataplane=None):
     """
     Score based on isomorphism of the graphs without dataplane traversals.
     Args:
       cur_group:  RaceGroup
       cluster:  Cluster to check
+      nodataplane: if a graph is submittet, it is used instead of removing the dataplane events from the cluster
 
     Returns:
       score
     """
-    graph = self.remove_dataplanetraversals(cluster[0])
+    if nodataplane is None:
+      graph = self.remove_dataplanetraversals(cluster[0])
+    else:
+      graph = nodataplane
 
     if nx.is_isomorphic(graph, cur_group.repre, node_match=self.node_match, edge_match=self.edge_match):
-      return self.score_iso_nodataplane * len(cluster)
+      return self.score_iso_nodataplane
     else:
       return 0
 
-  def iso_substituted_pingpong(self, cur_group, cluster):
+  def iso_substituted_pingpong(self, cur_group, cluster, pingpong=None):
     """
     Score based on isomorphism of the graphs with substituted controller-switch-pingpong.
+    Args:
+      cur_group:  RaceGroup
+      cluster:  Cluster to check
+      pingpong: If a graph is submittet, it is used instead of calculating the graph with substituted pingpongs
+
+    Returns:
+      score
+    """
+    if pingpong is None:
+      graph = self.substitute_pingpong(cluster[0])
+    else:
+      graph = pingpong
+
+    if nx.is_isomorphic(graph, cur_group.repre, node_match=self.node_match, edge_match=self.edge_match):
+      return self.score_iso_nodataplane
+    else:
+      return 0
+
+  def get_score_single_send(self, cur_group, cluster):
+    """
+    Score is achieved if both, the representative graph of the current group and the graphs in the cluster are
+    caused by a single send event.
     Args:
       cur_group:  RaceGroup
       cluster:  Cluster to check
@@ -280,9 +371,8 @@ class Rank:
     Returns:
       score
     """
-    graph = self.substitute_pingpong(cluster[0])
-    if nx.is_isomorphic(graph, cur_group.repre, node_match=self.node_match, edge_match=self.edge_match):
-      return self.score_iso_nodataplane * len(cluster)
+    if cur_group.single_send and self.is_caused_by_single_send(cluster[0]):
+      return self.score_single_send
     else:
       return 0
 
@@ -392,4 +482,41 @@ class Rank:
         stack.extend(graph.successors(curr_node))
 
     return graph
+
+  def is_caused_by_single_send(self, graph):
+    """
+    Returns if the race is caused by a single send (e.g. one host send).
+    """
+    if (len([x for x in graph.nodes() if not graph.predecessors(x)]) == 1 and
+        len([x for x in graph.nodes() if not graph.successors(x)]) == 2):
+      return True
+    else:
+      return False
+
+  def print_scoredict(self, scoredict):
+    logger.debug("Score Dictionary")
+    num = self.max_groups + 1
+    len_cluster = 5
+    sep_line = '-' * (4 + len_cluster + (num * 9))
+    title = '|      |' + ' %6d |' * (num - 1) + '  Total |'
+
+    logger.debug(sep_line)
+    logger.debug(title % tuple(range(0, num)))
+    logger.debug(sep_line)
+
+    for ind, cluster_dict in enumerate(scoredict):
+      line = '| %4d |' % ind
+      tot = 0
+      for score in cluster_dict['scores']:
+        if score is None:
+          line += '  None  |'
+        else:
+          line += ' %6.4f |' % score
+          tot += score
+      line += ' %6.4f |' % tot
+      logger.debug(line)
+
+    logger.debug(sep_line)
+
+
 
