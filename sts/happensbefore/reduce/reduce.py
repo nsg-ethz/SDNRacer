@@ -2,6 +2,7 @@
 
 import sys
 import os
+import time
 import shutil
 import ConfigParser
 import logging.config
@@ -10,9 +11,10 @@ import argparse
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
 import hb_graph
 
-
 class Reduce:
   def __init__(self, hb_graph, trace_file):
+    self.tstart = time.time()
+
     print ""
     print ""
     print "########################################################################"
@@ -158,6 +160,8 @@ class Reduce:
     self.logger.info("Start ranking...")
     self.ranking.run(clusters)
     self.logger.info("Finished ranking")
+
+    self.logger.info("Total time: %f s" % (time.time() - self.tstart))
 
 
 def auto_int(x):

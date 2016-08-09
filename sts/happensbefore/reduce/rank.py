@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RankGroup:
-  def __init__(self, repre, cluster, pingpong, nodataplane, single_send):
+  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path_affected):
     """
     Class to store the rank groups (group of subgraphs). Each group has a score, representative graph to show to the user
     and a list of all clusters contained in the group.
@@ -21,11 +21,12 @@ class RankGroup:
       graphs: List of all graphs in this group
     """
     self.repre = repre                    # Representative Graph
-    self.clusters = [cluster]              # All clusters/Graphs
-    self.num_graphs = len(cluster)
+    self.clusters = [cluster]             # All clusters/Graphs
+    self.num_graphs = len(cluster)        # Number of all graphs in a group
     self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
     self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
     self.single_send = single_send        # Indicates if the race is caused by a single send
+    self.return_path_affected = return_path_affected # Indicates if there is a HostHandle -> return path is affected
 
   def add_cluster(self, cluster):
     self.clusters.append(cluster)
@@ -67,8 +68,8 @@ class Rank:
     cluster_scores = []
     for c in clusters:
       cluster_dict = {'cluster': c,
-                      'pingpong': self.substitute_pingpong(c[0]),
-                      'nodataplane': self.remove_dataplanetraversals(c[0]),
+                      'pingpong': utils.substitute_pingpong(c[0]),
+                      'nodataplane': utils.remove_dataplanetraversals(c[0]),
                       'group': None,
                       'scores': []}
       cluster_scores.append(cluster_dict)
@@ -90,9 +91,9 @@ class Rank:
       # Generate next group
       c = cluster_scores[cluster_ind]['cluster']
       r = c[0]
-      pingpong = self.substitute_pingpong(r)
-      nodataplane = self.remove_dataplanetraversals(r)
-      single_send = self.is_caused_by_single_send(r)
+      pingpong = utils.substitute_pingpong(r)
+      nodataplane = utils.remove_dataplanetraversals(r)
+      single_send = utils.is_caused_by_single_send(r)
       cur_group = len(self.groups)
       self.groups.append(RankGroup(r, c, pingpong, nodataplane, single_send))
       cluster_scores[cluster_ind]['group'] = cur_group
@@ -357,7 +358,7 @@ class Rank:
     Returns:
       score
     """
-    if pingpong is None or cur_group.pingpong is None:
+    if pingpong is None or cur_group.repre_pingpong is None:
       return 0
     elif self.iso_components(pingpong, cur_group.repre_pingpong):
       return self.score_iso_nodataplane
@@ -375,132 +376,10 @@ class Rank:
     Returns:
       score
     """
-    if cur_group.single_send and self.is_caused_by_single_send(cluster[0]):
+    if cur_group.single_send and utils.is_caused_by_single_send(cluster[0]):
       return self.score_single_send
     else:
       return 0
-
-  def remove_dataplanetraversals(self, g):
-    """
-    Returns a copy of the graph g with removed dataplane traversals.
-    """
-    # First copy the representative graph
-    graph = g.copy()
-
-    # Now remove all DataplaneTraversals
-    stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-
-    found_dataplanetraversal = False
-    while stack:
-      node = stack.pop()
-      stack.extend(graph.successors(node))
-      if graph.node[node]['event'] == 'DataplaneTraversal':
-        found_dataplanetraversal = True
-        for p in graph.predecessors(node):
-          for s in graph.successors(node):
-            graph.add_edge(p, s, {'label': '', 'rel': ''})
-
-        graph.remove_node(node)
-
-    return graph if found_dataplanetraversal else None
-
-  def substitute_pingpong(self, g):
-    """
-    Checks if the graph contains a controller-switch-pingpong and substitute it with a single node.
-    Returns:
-      graph with substituted nodes
-    """
-    # First copy graph
-    graph = g.copy()
-
-    # Now check for controller-switch-pingpong
-    stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-    found_pingpong = False
-
-    while stack:
-      curr_node = stack.pop()
-
-      if graph.node[curr_node]['event'] == 'ControllerHandle':
-        # Found first controllerhandle -> No get dpid of switch
-        pre = graph.predecessors(curr_node)
-        suc = graph.successors(curr_node)
-        dpid = graph.node[pre[0]]['event'].dpid
-
-        if len(pre) != 1 or len(suc) != 1:
-          # Not PingPong -> continue with successors
-          stack.extend(suc)
-          continue
-
-        # Check if the next node is a MessageHandle with the same dpid
-        if not (isinstance(graph.node[suc[0]]['event'], hb_events.HbMessageHandle) or
-                graph.node[suc[0]]['event'].dpid == dpid):
-          # Not PingPong -> continue with successors
-          stack.extend(suc)
-          continue
-
-        # Check if the event after is again a controllerhandle
-        node = graph.successors(suc[0])
-        if not len(node) == 1 or not graph.node[node[0]]['event'] == 'ControllerHandle':
-          # Not PingPong -> continue with successors
-          stack.extend(suc)
-          continue
-
-        # Found Controller-Switch-PingPong
-        found_pingpong = True
-        # find all nodes which are part of it
-        ids = [curr_node, suc[0], node[0]]  # NodeIds which are part of the pingpong
-        num = 2
-        node = graph.successors(node[0])
-        if len(node) == 1:
-          suc = graph.successors(node[0])
-
-          while len(suc) == 1 and len(node) == 1:
-            # Check if there is another pingpong
-            if (isinstance(graph.node[node[0]]['event'], hb_events.HbMessageHandle) and
-                    graph.node[node[0]]['event'].dpid == dpid and
-                    graph.node[suc[0]]['event'] == 'ControllerHandle'):
-              # Found another pingpong -> add ids
-              num += 1
-              ids.append(node[0])
-              ids.append(suc[0])
-              node = graph.successors(node[0])
-              if len(node) != 1:
-                break
-              else:
-                suc = graph.successors(node[0])
-
-            else:
-              break
-
-        # Substitute nodes
-        for n in graph.successors(ids[-1]):
-          graph.add_edge(ids[0], n, graph.edge[ids[-1]][n])
-          # add them to the stack
-          stack.append(n)
-
-        # Now Modify the information in the first node
-        graph.node[ids[0]]['event'] = 'PingPong'
-        graph.node[ids[0]]['event_ids'] = []  # Not relevant since this is only a copy
-        graph.node[ids[0]]['label'] = 'PingPong \\n DPID: %d \\n Num: %d' % (dpid, num)
-        graph.node[ids[0]]['color'] = 'green'
-
-        # Remove the nodes
-        graph.remove_nodes_from(ids[1:])
-
-      else:
-        stack.extend(graph.successors(curr_node))
-
-    return graph if found_pingpong else None
-
-  def is_caused_by_single_send(self, graph):
-    """
-    Returns if the race is caused by a single send (e.g. one host send).
-    """
-    if (len([x for x in graph.nodes() if not graph.predecessors(x)]) == 1 and
-        len([x for x in graph.nodes() if not graph.successors(x)]) == 2):
-      return True
-    else:
-      return False
 
   def print_scoredict(self, scoredict):
     logger.debug("Score Dictionary")
