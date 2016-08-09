@@ -121,8 +121,9 @@ class Rank:
         if cluster_dict['group'] is not None:
           continue
 
-        # Check if all scores are more than threshold -> continue with next
-        if min(cluster_dict['scores']) > self.threshold:
+        print "Ind: %d, Scores: %s" % (ind, cluster_dict['scores'])
+        # Check if there is a higher score than threshold -> continue with next
+        if max(cluster_dict['scores']) > self.threshold:
           continue
 
         # Get score, Ignore scores for groups which are not calculated yet
@@ -131,14 +132,11 @@ class Rank:
         # Clusters are ordered in size, so the first graph with the smallest score is always the biggest
         if score == 0:
           cluster_ind = ind
-          min_score = 0
           break
 
         elif score < min_score:
           min_score = score
           cluster_ind = ind
-
-      logger.debug("\tLowest: Cluster %d, Score %f (%s)" % (cluster_ind, min_score, cluster_scores[cluster_ind]['scores']))
 
     tgroup = time.time()
     logger.info("Assign clusters to groups")
@@ -171,7 +169,7 @@ class Rank:
     logger.info("Export Graphs")
     tassign = time.time()
 
-    self.groups.sort(key=lambda x: len(x.clusters), reverse=True)
+    self.groups.sort(key=lambda x: x.num_graphs, reverse=True)
     self.export_groups()
 
     texport = time.time()
@@ -182,7 +180,7 @@ class Rank:
 
     logger.info("Summary:")
     for ind, g in enumerate(self.groups):
-      logger.info("\tGroup %s: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
+      logger.info("\tGroup %3d: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
     logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(remaining), num_graphs))
     logger.info("Timing:")
     logger.info("\tBuild score dict:     %10.3f s" % (tdict - tstart))
@@ -268,7 +266,6 @@ class Rank:
     Score based on isomorphism of the graphs without dataplane traversals.
     Args:
       cur_group:  RaceGroup
-      cluster:  Cluster to check
       nodataplane: if a graph is submittet, it is used instead of removing the dataplane events from the cluster
 
     Returns:
@@ -286,7 +283,6 @@ class Rank:
     Score based on isomorphism of the graph components with substituted controller-switch-pingpong.
     Args:
       cur_group:  RaceGroup
-      cluster:  Cluster to check
       pingpong: If a graph is submittet, it is used instead of calculating the graph with substituted pingpongs
 
     Returns:
@@ -345,25 +341,22 @@ class Rank:
 
   def print_scoredict(self, scoredict):
     logger.debug("Score Dictionary")
-    num = self.max_groups + 1
+    num = self.max_groups
     len_cluster = 5
     sep_line = '-' * (4 + len_cluster + (num * 9))
-    title = '|      |' + ' %6d |' * (num - 1) + '  Total |'
+    title = '|      |' + ' %6d |' * num
 
     logger.debug(sep_line)
-    logger.debug(title % tuple(range(0, num - 1)))
+    logger.debug(title % tuple(range(0, num)))
     logger.debug(sep_line)
 
     for ind, cluster_dict in enumerate(scoredict):
       line = '| %4d |' % ind
-      tot = 0
       for score in cluster_dict['scores']:
         if score is None:
           line += '  None  |'
         else:
           line += ' %6.4f |' % score
-          tot += score
-      line += ' %6.4f |' % tot
       logger.debug(line)
 
     logger.debug(sep_line)

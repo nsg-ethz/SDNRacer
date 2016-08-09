@@ -188,7 +188,7 @@ def iso_components(graph1, graph2):
   """
   Return True if any components of the graph are isomorphic.
   """
-  # Split the graph
+  # Split graph1
   components = nx.weakly_connected_components(graph1)
 
   if len(components) == 2:
@@ -205,7 +205,7 @@ def iso_components(graph1, graph2):
     g1 = None
     g2 = None
 
-  # Split the representative graph
+  # Split split graph 2
   components = nx.weakly_connected_components(graph2)  # Only consider first graph of the cluster
 
   if len(components) == 2:
