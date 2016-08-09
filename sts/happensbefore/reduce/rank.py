@@ -5,13 +5,12 @@ import sys
 import networkx as nx
 
 import utils
-import hb_events
 
 logger = logging.getLogger(__name__)
 
 
 class RankGroup:
-  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path_affected):
+  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path):
     """
     Class to store the rank groups (group of subgraphs). Each group has a score, representative graph to show to the user
     and a list of all clusters contained in the group.
@@ -26,7 +25,7 @@ class RankGroup:
     self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
     self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
     self.single_send = single_send        # Indicates if the race is caused by a single send
-    self.return_path_affected = return_path_affected # Indicates if there is a HostHandle -> return path is affected
+    self.return_path = return_path        # Indicates if there is a HostHandle -> return path is affected
 
   def add_cluster(self, cluster):
     self.clusters.append(cluster)
@@ -44,6 +43,7 @@ class Rank:
                score_iso_nodataplane=1,
                score_iso_pingpong=1,
                score_single_send=1,
+               score_return_path=1,
                min_score=1,
                threshold=1):
     self.resultdir = resultdir
@@ -53,6 +53,7 @@ class Rank:
     self.score_iso_nodataplane = float(score_iso_nodataplane)
     self.score_iso_pingpong = float(score_iso_pingpong)
     self.score_single_send = float(score_single_send)
+    self.score_return_path = float(score_return_path)
     self.min_score = float(min_score)
     self.threshold = float(threshold)
     self.num_groups = 0
@@ -88,14 +89,18 @@ class Rank:
 
     while len(self.groups) < self.max_groups and cluster_ind is not None:
       logger.debug("Generate group %d" % len(self.groups))
+
       # Generate next group
       c = cluster_scores[cluster_ind]['cluster']
       r = c[0]
       pingpong = utils.substitute_pingpong(r)
       nodataplane = utils.remove_dataplanetraversals(r)
       single_send = utils.is_caused_by_single_send(r)
-      cur_group = len(self.groups)
-      self.groups.append(RankGroup(r, c, pingpong, nodataplane, single_send))
+      return_path = utils.has_return_path(r)
+      self.groups.append(RankGroup(r, c, pingpong, nodataplane, single_send, return_path))
+
+      # prepare next step
+      cur_group = len(self.groups) - 1
       cluster_scores[cluster_ind]['group'] = cur_group
 
       # Calculate the score for all other clusters
@@ -193,23 +198,23 @@ class Rank:
     score = 0
 
     # Isomorphic parts
-    score += self.iso_branch(group, cluster)
+    score += self.get_score_iso_components(group, cluster)
 
     # Same write event
-    score += self.same_write_event(group, cluster)
+    score += self.get_score_same_write_event(group, cluster)
 
     # Caused by single send
     score += self.get_score_single_send(group, cluster)
 
     # Isomorphic without dataplane traversal
-    score += self.iso_no_dataplane(group, nodataplane)
+    score += self.get_score_iso_no_dataplane(group, nodataplane)
 
     # Isomorphic with reduced controller switch pingpong
-    score += self.iso_substituted_pingpong(group, pingpong)
+    score += self.get_socre_iso_pingpong(group, pingpong)
 
     return score
 
-  def iso_branch(self, group, cluster):
+  def get_score_iso_components(self, group, cluster):
     """
     Rank based on isomorphic branches of the graphs. Add score if a graph of cluster has a race brach which is
     isomorphic to a branch of the representative graph of the group.
@@ -221,68 +226,9 @@ class Rank:
     Returns:
       score
     """
-    return self.score_iso_branch if self.iso_components(cluster[0], group.repre) else 0
+    return self.score_iso_branch if utils.iso_components(cluster[0], group.repre) else 0
 
-  def iso_components(self, graph1, graph2):
-    """
-    Return True if any components of the graph are isomorphic.
-    """
-    # Split the graph
-    components = nx.weakly_connected_components(graph1)
-
-    if len(components) == 2:
-      # Only interesting if the graph has two separate branches
-      g1 = nx.DiGraph(graph1.subgraph(components[0]))
-      g2 = nx.DiGraph(graph1.subgraph(components[1]))
-
-      # Only consider "write branches"
-      if not utils.has_write_event(g1):
-        g1 = None
-      if not utils.has_write_event(g2):
-        g2 = None
-    else:
-      g1 = None
-      g2 = None
-
-    # Split the representative graph
-    components = nx.weakly_connected_components(graph2)  # Only consider first graph of the cluster
-
-    if len(components) == 2:
-      # Only interesting if the graph has two separate branches
-      r1 = nx.DiGraph(graph2.subgraph(components[0]))
-      r2 = nx.DiGraph(graph2.subgraph(components[1]))
-
-      # Only consider "write branches"
-      if not utils.has_write_event(r1):
-        r1 = None
-      if not utils.has_write_event(r2):
-        r2 = None
-    else:
-      r1 = None
-      r2 = None
-
-    # Find isomorphic parts
-    iso = False
-    if g1 and r1 and nx.is_isomorphic(g1, r1, node_match=self.node_match, edge_match=self.edge_match):
-      iso = True
-    elif g1 and r2 and nx.is_isomorphic(g1, r2, node_match=self.node_match, edge_match=self.edge_match):
-      iso = True
-    elif g2 and r1 and nx.is_isomorphic(g2, r1, node_match=self.node_match, edge_match=self.edge_match):
-      iso = True
-    elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=self.node_match, edge_match=self.edge_match):
-      iso = True
-
-    return iso
-
-  def node_match(self, n1, n2):
-    # it returns True if two nodes have the same event type
-    return type(n1['event']) == type(n2['event'])
-
-  def edge_match(self, e1, e2):
-    # it returns True if two edges have the same relation
-    return e1['rel'] == e2['rel']
-
-  def same_write_event(self, group, cluster):
+  def get_score_same_write_event(self, group, cluster):
     """
     Checks if the races are caused by the same write event. Increases score for each graph that is caused by the same
     write event as one graph from the group
@@ -317,19 +263,7 @@ class Rank:
 
     return score / float(len(cluster))
 
-  def export_groups(self):
-    for ind, group in enumerate(self.groups):
-      export_path = os.path.join(self.resultdir, 'groups')
-      if not os.path.exists(export_path):
-        os.makedirs(export_path)
-      nx.write_dot(group.repre, os.path.join(export_path, 'repre_%03d.dot' % ind))
-
-      if group.repre_nodataplane is not None:
-        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
-      if group.repre_pingpong is not None:
-        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
-
-  def iso_no_dataplane(self, cur_group, nodataplane):
+  def get_score_iso_no_dataplane(self, cur_group, nodataplane):
     """
     Score based on isomorphism of the graphs without dataplane traversals.
     Args:
@@ -342,12 +276,12 @@ class Rank:
     """
     if nodataplane is None or cur_group.repre_nodataplane is None:
       return 0
-    elif self.iso_components(nodataplane, cur_group.repre_nodataplane):
+    elif utils.iso_components(nodataplane, cur_group.repre_nodataplane):
       return self.score_iso_nodataplane
     else:
       return 0
 
-  def iso_substituted_pingpong(self, cur_group, pingpong):
+  def get_socre_iso_pingpong(self, cur_group, pingpong):
     """
     Score based on isomorphism of the graph components with substituted controller-switch-pingpong.
     Args:
@@ -360,7 +294,7 @@ class Rank:
     """
     if pingpong is None or cur_group.repre_pingpong is None:
       return 0
-    elif self.iso_components(pingpong, cur_group.repre_pingpong):
+    elif utils.iso_components(pingpong, cur_group.repre_pingpong):
       return self.score_iso_nodataplane
     else:
       return 0
@@ -380,6 +314,34 @@ class Rank:
       return self.score_single_send
     else:
       return 0
+
+  def get_score_return_path(self, cur_group, cluster):
+    """
+    Get score if both, the representative graph of the current group and the graphs in the clusters contain a return
+    path.
+    Args:
+      cur_group:  RaceGroup
+      cluster:  Cluster to check
+
+    Returns:
+      score
+    """
+    if cur_group.return_path and utils.has_return_path(cluster[0]):
+      return self.score_return_path
+    else:
+      return 0
+
+  def export_groups(self):
+    for ind, group in enumerate(self.groups):
+      export_path = os.path.join(self.resultdir, 'groups')
+      if not os.path.exists(export_path):
+        os.makedirs(export_path)
+      nx.write_dot(group.repre, os.path.join(export_path, 'repre_%03d.dot' % ind))
+
+      if group.repre_nodataplane is not None:
+        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
+      if group.repre_pingpong is not None:
+        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
 
   def print_scoredict(self, scoredict):
     logger.debug("Score Dictionary")
