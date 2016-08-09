@@ -43,6 +43,7 @@ class Rank:
                score_iso_nodataplane=1,
                score_iso_pingpong=1,
                score_single_send=1,
+               min_score=1,
                threshold=1):
     self.resultdir = resultdir
     self.max_groups = int(max_groups)
@@ -51,6 +52,7 @@ class Rank:
     self.score_iso_nodataplane = float(score_iso_nodataplane)
     self.score_iso_pingpong = float(score_iso_pingpong)
     self.score_single_send = float(score_single_send)
+    self.min_score = float(min_score)
     self.threshold = float(threshold)
     self.num_groups = 0
     self.groups = []
@@ -68,7 +70,7 @@ class Rank:
                       'pingpong': self.substitute_pingpong(c[0]),
                       'nodataplane': self.remove_dataplanetraversals(c[0]),
                       'group': None,
-                      'scores': [None] * self.max_groups}
+                      'scores': []}
       cluster_scores.append(cluster_dict)
 
     tdict = time.time()
@@ -83,7 +85,7 @@ class Rank:
     logger.info("Generate Groups")
     cluster_ind = 0
 
-    while len(self.groups) < self.max_groups:
+    while len(self.groups) < self.max_groups and cluster_ind is not None:
       logger.debug("Generate group %d" % len(self.groups))
       # Generate next group
       c = cluster_scores[cluster_ind]['cluster']
@@ -103,7 +105,7 @@ class Rank:
                                        cluster_dict['cluster'],
                                        cluster_dict['pingpong'],
                                        cluster_dict['nodataplane'])
-          cluster_dict['scores'][cur_group] = score
+          cluster_dict['scores'].append(score)
 
       # Get biggest cluster with lowest overall score
       min_score = sys.maxint
@@ -113,8 +115,12 @@ class Rank:
         if cluster_dict['group'] is not None:
           continue
 
+        # Check if all scores are more than threshold -> continue with next
+        if min(cluster_dict['scores']) > self.threshold:
+          continue
+
         # Get score, Ignore scores for groups which are not calculated yet
-        score = sum([x for x in cluster_dict['scores'] if x is not None])
+        score = sum(cluster_dict['scores'])
 
         # Clusters are ordered in size, so the first graph with the smallest score is always the biggest
         if score == 0:
@@ -138,22 +144,23 @@ class Rank:
       # Only calculate score if not already assigned
       if cluster_dict['group'] is None:
         for ind in range(0, len(self.groups)):
-          if cluster_dict['scores'][ind] is None:
-            cluster_dict['scores'][ind] = self.calculate_score(self.groups[ind],
+          if len(cluster_dict['scores']) <= ind:
+            cluster_dict['scores'].append(self.calculate_score(self.groups[ind],
                                                                cluster_dict['cluster'],
                                                                cluster_dict['pingpong'],
-                                                               cluster_dict['nodataplane'])
+                                                               cluster_dict['nodataplane']))
 
-        # If a cluster has score 0 for all groups -> put it in "Remaining"
-        if sum(cluster_dict['scores']) == 0:
+        # If a cluster has score 0 for all groups or the max score is below the threshold -> put it in "Remaining"
+        if sum(cluster_dict['scores']) == 0 or max(cluster_dict['scores']) < self.min_score:
           remaining.append(cluster_dict['cluster'])
           num_graphs += len(cluster_dict['cluster'])
 
-        # Now assign the cluster to the group with the highest score
-        # (take the first if there are multiple with the same score)
-        max_score_ind = cluster_dict['scores'].index(max(cluster_dict['scores']))
-        cluster_dict['group'] = max_score_ind
-        self.groups[max_score_ind].add_cluster(cluster_dict['cluster'])
+        else:
+          # Now assign the cluster to the group with the highest score
+          # (take the first if there are multiple with the same score)
+          max_score_ind = cluster_dict['scores'].index(max(cluster_dict['scores']))
+          cluster_dict['group'] = max_score_ind
+          self.groups[max_score_ind].add_cluster(cluster_dict['cluster'])
 
     logger.info("Export Graphs")
     tassign = time.time()
@@ -178,7 +185,7 @@ class Rank:
     logger.info("\tExport groups:        %10.3f s" % (texport - tassign))
     logger.info("\tTOTAL:                %10.3f s" % (texport - tstart))
 
-  def calculate_score(self, group, cluster, pingpong=None, nodataplane=None):
+  def calculate_score(self, group, cluster, pingpong, nodataplane):
     """
     Calculates the likeliness score of cluster to be in group.
     """
@@ -194,10 +201,10 @@ class Rank:
     score += self.get_score_single_send(group, cluster)
 
     # Isomorphic without dataplane traversal
-    score += self.iso_no_dataplane(group, cluster, nodataplane)
+    score += self.iso_no_dataplane(group, nodataplane)
 
     # Isomorphic with reduced controller switch pingpong
-    score += self.iso_substituted_pingpong(group, cluster, pingpong)
+    score += self.iso_substituted_pingpong(group, pingpong)
 
     return score
 
@@ -315,10 +322,13 @@ class Rank:
       if not os.path.exists(export_path):
         os.makedirs(export_path)
       nx.write_dot(group.repre, os.path.join(export_path, 'repre_%03d.dot' % ind))
-      nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
-      nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
 
-  def iso_no_dataplane(self, cur_group, cluster, nodataplane=None):
+      if group.repre_nodataplane is not None:
+        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
+      if group.repre_pingpong is not None:
+        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
+
+  def iso_no_dataplane(self, cur_group, nodataplane):
     """
     Score based on isomorphism of the graphs without dataplane traversals.
     Args:
@@ -329,19 +339,16 @@ class Rank:
     Returns:
       score
     """
-    if nodataplane is None:
-      graph = self.remove_dataplanetraversals(cluster[0])
-    else:
-      graph = nodataplane
-
-    if nx.is_isomorphic(graph, cur_group.repre, node_match=self.node_match, edge_match=self.edge_match):
+    if nodataplane is None or cur_group.repre_nodataplane is None:
+      return 0
+    elif self.iso_components(nodataplane, cur_group.repre_nodataplane):
       return self.score_iso_nodataplane
     else:
       return 0
 
-  def iso_substituted_pingpong(self, cur_group, cluster, pingpong=None):
+  def iso_substituted_pingpong(self, cur_group, pingpong):
     """
-    Score based on isomorphism of the graphs with substituted controller-switch-pingpong.
+    Score based on isomorphism of the graph components with substituted controller-switch-pingpong.
     Args:
       cur_group:  RaceGroup
       cluster:  Cluster to check
@@ -350,12 +357,9 @@ class Rank:
     Returns:
       score
     """
-    if pingpong is None:
-      graph = self.substitute_pingpong(cluster[0])
-    else:
-      graph = pingpong
-
-    if nx.is_isomorphic(graph, cur_group.repre, node_match=self.node_match, edge_match=self.edge_match):
+    if pingpong is None or cur_group.pingpong is None:
+      return 0
+    elif self.iso_components(pingpong, cur_group.repre_pingpong):
       return self.score_iso_nodataplane
     else:
       return 0
@@ -386,17 +390,19 @@ class Rank:
     # Now remove all DataplaneTraversals
     stack = [x for x in graph.nodes() if not graph.predecessors(x)]
 
+    found_dataplanetraversal = False
     while stack:
       node = stack.pop()
       stack.extend(graph.successors(node))
       if graph.node[node]['event'] == 'DataplaneTraversal':
+        found_dataplanetraversal = True
         for p in graph.predecessors(node):
           for s in graph.successors(node):
             graph.add_edge(p, s, {'label': '', 'rel': ''})
 
         graph.remove_node(node)
 
-    return graph
+    return graph if found_dataplanetraversal else None
 
   def substitute_pingpong(self, g):
     """
@@ -409,6 +415,7 @@ class Rank:
 
     # Now check for controller-switch-pingpong
     stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+    found_pingpong = False
 
     while stack:
       curr_node = stack.pop()
@@ -438,7 +445,9 @@ class Rank:
           stack.extend(suc)
           continue
 
-        # Found Controller-Switch-PingPong -> find all nodes which are part of it
+        # Found Controller-Switch-PingPong
+        found_pingpong = True
+        # find all nodes which are part of it
         ids = [curr_node, suc[0], node[0]]  # NodeIds which are part of the pingpong
         num = 2
         node = graph.successors(node[0])
@@ -481,7 +490,7 @@ class Rank:
       else:
         stack.extend(graph.successors(curr_node))
 
-    return graph
+    return graph if found_pingpong else None
 
   def is_caused_by_single_send(self, graph):
     """
@@ -501,7 +510,7 @@ class Rank:
     title = '|      |' + ' %6d |' * (num - 1) + '  Total |'
 
     logger.debug(sep_line)
-    logger.debug(title % tuple(range(0, num)))
+    logger.debug(title % tuple(range(0, num - 1)))
     logger.debug(sep_line)
 
     for ind, cluster_dict in enumerate(scoredict):

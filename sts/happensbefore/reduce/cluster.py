@@ -107,7 +107,7 @@ class Cluster:
     # First write the number of subgraphs and the number of clusters
     num_cluster = len(clusters)
     num_subgraphs = sum([len(x) for x in clusters])
-    logger.debug("%sTotal Clusters: %d, Total Subgraphs: %d" % (indent, num_cluster, num_subgraphs))
+    logger.debug("Total Clusters: %d, Total Subgraphs: %d" % (num_cluster, num_subgraphs))
     curr_size = sys.maxint
     start_ind = 0
     if indent:
@@ -121,5 +121,5 @@ class Cluster:
         curr_size = len(cluster)
         start_ind = ind
 
-    logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(clusters) - 1, len(clusters[-1])))
+    logger.debug("%sCluster %5d - %5d: %5d graphs each" % (indent, start_ind, len(clusters) - 1, len(clusters[-1])))
 
