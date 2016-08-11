@@ -58,6 +58,8 @@ class Rank:
     self.threshold = float(threshold)
     self.num_groups = 0
     self.groups = []
+    self.remaining = []
+    self.timing = {}
 
   def run(self, clusters):
     logger.info("Start Ranking")
@@ -121,7 +123,6 @@ class Rank:
         if cluster_dict['group'] is not None:
           continue
 
-        print "Ind: %d, Scores: %s" % (ind, cluster_dict['scores'])
         # Check if there is a higher score than threshold -> continue with next
         if max(cluster_dict['scores']) > self.threshold:
           continue
@@ -142,7 +143,6 @@ class Rank:
     logger.info("Assign clusters to groups")
 
     # Now calculate the score for all clusters and groups
-    remaining = []
     num_graphs = 0
     for cluster_dict in cluster_scores:
       # Only calculate score if not already assigned
@@ -156,7 +156,7 @@ class Rank:
 
         # If a cluster has score 0 for all groups or the max score is below the threshold -> put it in "Remaining"
         if sum(cluster_dict['scores']) == 0 or max(cluster_dict['scores']) < self.min_score:
-          remaining.append(cluster_dict['cluster'])
+          self.remaining.append(cluster_dict['cluster'])
           num_graphs += len(cluster_dict['cluster'])
 
         else:
@@ -178,37 +178,32 @@ class Rank:
 
     self.print_scoredict(cluster_scores)
 
-    logger.info("Summary:")
-    for ind, g in enumerate(self.groups):
-      logger.info("\tGroup %3d: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
-    logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(remaining), num_graphs))
-    logger.info("Timing:")
-    logger.info("\tBuild score dict:     %10.3f s" % (tdict - tstart))
-    logger.info("\tGenerate groups:      %10.3f s" % (tgroup - tdict))
-    logger.info("\tCalc. score & assign: %10.3f s" % (tassign - tgroup))
-    logger.info("\tExport groups:        %10.3f s" % (texport - tassign))
-    logger.info("\tTOTAL:                %10.3f s" % (texport - tstart))
+    self.timing['total'] = texport - tstart    # Time Total
+    self.timing['prepare'] = tdict - tstart    # Time to prepare the clusters (score dict)
+    self.timing['groups'] = tgroup - tdict     # Time to build the groups
+    self.timing['assign'] = tassign - tgroup   # Time to assign the clusters to the groups
+    self.timing['export'] = texport - tassign  # Time to export the graphs
 
   def calculate_score(self, group, cluster, pingpong, nodataplane):
     """
     Calculates the likeliness score of cluster to be in group.
     """
-    score = 0
-
     # Isomorphic parts
-    score += self.get_score_iso_components(group, cluster)
+    iso_score = self.get_score_iso_components(group, cluster)
 
     # Same write event
-    score += self.get_score_same_write_event(group, cluster)
+    same_write_score = self.get_score_same_write_event(group, cluster)
 
     # Caused by single send
-    score += self.get_score_single_send(group, cluster)
+    singe_send_score = self.get_score_single_send(group, cluster)
 
     # Isomorphic without dataplane traversal
-    score += self.get_score_iso_no_dataplane(group, nodataplane)
+    no_dataplane_score = self.get_score_iso_no_dataplane(group, nodataplane)
 
     # Isomorphic with reduced controller switch pingpong
-    score += self.get_socre_iso_pingpong(group, pingpong)
+    pingpong_score = self.get_socre_iso_pingpong(group, pingpong)
+
+    score = iso_score + same_write_score + singe_send_score + no_dataplane_score + pingpong_score
 
     return score
 
@@ -361,5 +356,24 @@ class Rank:
 
     logger.debug(sep_line)
 
+  def print_timing(self):
+    """ Logs the timing information."""
+    logger.info("Timing:")
+    logger.info("\tBuild score dict:     %10.3f s" % self.timing['prepare'])
+    logger.info("\tGenerate groups:      %10.3f s" % self.timing['groups'])
+    logger.info("\tCalc. score & assign: %10.3f s" % self.timing['assign'])
+    logger.info("\tExport groups:        %10.3f s" % self.timing['assign'])
+    logger.info("\tTOTAL:                %10.3f s" % self.timing['export'])
 
+  def print_summary(self):
+    """ Prints the group summary"""
+
+    # Calculate number of remaining graphs
+    num_graphs = sum([len(x) for x in self.remaining])
+
+    # log summary
+    logger.info("Summary:")
+    for ind, g in enumerate(self.groups):
+      logger.info("\tGroup %3d: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
+    logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(remaining), num_graphs))
 

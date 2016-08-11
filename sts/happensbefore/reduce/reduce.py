@@ -72,11 +72,12 @@ class Reduce:
     assert config.has_section('rank'), 'Missing configuration group "rank"'
     rankargs = dict(config.items('rank'))
 
-    self.ranking = rank.Rank(self.resultdir, **rankargs)
+    self.rank = rank.Rank(self.resultdir, **rankargs)
 
     # graph data
     self.hb_graph = hb_graph
 
+    self.tinit = time.time()
     # get subgraphs
     if config.has_section('subgraph') and config.has_option('subgraph', 'preprocessing'):
       preprocessing = config.getboolean('subgraph', 'preprocessing')
@@ -131,14 +132,18 @@ class Reduce:
 
     # Generating subgraphs
     self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=preprocessing)
+    self.num_races = len(subgraph)
     self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
+    self.tsubgraph = time.time()
 
   def run(self):
+    tstart = time.time()
     # Preprocessing
     if self.preprocessor:
       self.logger.info("Start preprocessing...")
       self.subgraphs = self.preprocessor.run(self.subgraphs)
       self.logger.info("Finished preprocessing")
+    tpreproc = time.time()
 
     ####################################################################################################################
     # Print preprocessed subgraphs
@@ -156,12 +161,30 @@ class Reduce:
     else:
       clusters = [[subg] for subg in self.subgraphs]
 
+    tcluster = time.time()
+
     # Ranking
     self.logger.info("Start ranking...")
-    self.ranking.run(clusters)
+    self.rank.run(clusters)
     self.logger.info("Finished ranking")
 
-    self.logger.info("Total time: %f s" % (time.time() - self.tstart))
+    trank = time.time()
+
+    # summary
+    self.logger.info("Summary")
+    self.logger.info("Number of Races (subgraphs): %d" % self.num_races)
+    self.logger.info("Number of Clusters: %d" % len(clusters))
+
+    self.rank.print_summary()
+
+    # summary timing
+    self.logger.info("Timing Information Summary:")
+    self.logger.info("\tTotal time: %f s" % (time.time() - self.tstart))
+    self.logger.info("\tInitialization: %f s" % (self.tinit - self.tstart))
+    self.logger.info("\tBuilding Subgraphs: %f s" % (self.tsubgraph - self.tinit))
+    self.logger.info("\tPreprocessing: %f s" % (tpreproc - tstart))
+    self.logger.info("\tClustering: %f s" % (tcluster - tpreproc))
+    self.logger.info("\tRanking: %f s" % (trank - tcluster))
 
 
 def auto_int(x):
