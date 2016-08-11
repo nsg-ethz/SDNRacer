@@ -9,27 +9,25 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-class RankGroup:
-  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path):
+class Group:
+  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path, write_ids):
     """
     Class to store the rank groups (group of subgraphs). Each group has a score, representative graph to show to the user
     and a list of all clusters contained in the group.
 
-    Args:
-      repre:  Representative graph
-      graphs: List of all graphs in this group
     """
     self.repre = repre                    # Representative Graph
     self.clusters = [cluster]             # All clusters/Graphs
-    self.num_graphs = len(cluster)        # Number of all graphs in a group
+    self.graphs = cluster                 # Number of all graphs in a group
     self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
     self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
     self.single_send = single_send        # Indicates if the race is caused by a single send
     self.return_path = return_path        # Indicates if there is a HostHandle -> return path is affected
+    self.write_ids = write_ids            # Set of all write-ids
 
   def add_cluster(self, cluster):
     self.clusters.append(cluster)
-    self.num_graphs += len(cluster)
+    self.graphs.extend(cluster)
 
 
 class Rank:
@@ -60,6 +58,7 @@ class Rank:
     self.groups = []
     self.remaining = []
     self.timing = {}
+    self.score_info = {}
 
   def run(self, clusters):
     logger.info("Start Ranking")
@@ -99,20 +98,22 @@ class Rank:
       nodataplane = utils.remove_dataplanetraversals(r)
       single_send = utils.is_caused_by_single_send(r)
       return_path = utils.has_return_path(r)
-      self.groups.append(RankGroup(r, c, pingpong, nodataplane, single_send, return_path))
+      write_ids = utils.get_write_events(c)
+      self.groups.append(Group(r, c, pingpong, nodataplane, single_send, return_path, write_ids))
 
       # prepare next step
       cur_group = len(self.groups) - 1
       cluster_scores[cluster_ind]['group'] = cur_group
 
       # Calculate the score for all other clusters
-      for ind, cluster_dict in enumerate(cluster_scores):
+      for cluster_ind, cluster_dict in enumerate(cluster_scores):
         # Only continue if the current cluster is not assigned yet
         if cluster_dict['group'] is None:
           score = self.calculate_score(self.groups[cur_group],
                                        cluster_dict['cluster'],
                                        cluster_dict['pingpong'],
-                                       cluster_dict['nodataplane'])
+                                       cluster_dict['nodataplane'],
+                                       cur_group, cluster_ind)
           cluster_dict['scores'].append(score)
 
       # Get biggest cluster with lowest overall score
@@ -144,15 +145,16 @@ class Rank:
 
     # Now calculate the score for all clusters and groups
     num_graphs = 0
-    for cluster_dict in cluster_scores:
+    for cluster_ind, cluster_dict in enumerate(cluster_scores):
       # Only calculate score if not already assigned
       if cluster_dict['group'] is None:
-        for ind in range(0, len(self.groups)):
+        for group_ind in range(0, len(self.groups)):
           if len(cluster_dict['scores']) <= ind:
-            cluster_dict['scores'].append(self.calculate_score(self.groups[ind],
+            cluster_dict['scores'].append(self.calculate_score(self.groups[group_ind],
                                                                cluster_dict['cluster'],
                                                                cluster_dict['pingpong'],
-                                                               cluster_dict['nodataplane']))
+                                                               cluster_dict['nodataplane'],
+                                                               group_ind, cluster_ind))
 
         # If a cluster has score 0 for all groups or the max score is below the threshold -> put it in "Remaining"
         if sum(cluster_dict['scores']) == 0 or max(cluster_dict['scores']) < self.min_score:
@@ -169,7 +171,7 @@ class Rank:
     logger.info("Export Graphs")
     tassign = time.time()
 
-    self.groups.sort(key=lambda x: x.num_graphs, reverse=True)
+    #self.groups.sort(key=lambda x: x.num_graphs, reverse=True)
     self.export_groups()
 
     texport = time.time()
@@ -184,7 +186,7 @@ class Rank:
     self.timing['assign'] = tassign - tgroup   # Time to assign the clusters to the groups
     self.timing['export'] = texport - tassign  # Time to export the graphs
 
-  def calculate_score(self, group, cluster, pingpong, nodataplane):
+  def calculate_score(self, group, cluster, pingpong, nodataplane, group_ind, cluster_ind):
     """
     Calculates the likeliness score of cluster to be in group.
     """
@@ -233,28 +235,11 @@ class Rank:
       score
     """
 
-    # Get the event ids of all write events in the group
-    write_ids = []
-    for cluster in group.clusters:
-      for graph in cluster:
-        # get leaf nodes
-        for node in (x for x in graph.nodes() if not graph.successors(x)):
-          if utils.is_write_event(node, graph):
-            write_ids.append(node)
-
     # check how many graphs of the cluster have a write event in common with the group
-    score = 0
-    for graph in cluster:
-      common_write = False
-      for node in (x for x in graph.nodes() if not graph.successors(x)):
-        if node in write_ids:
-          score += self.score_same_write
-          common_write = True
-          break
-      if common_write:
-        break
+    cluster_writes = utils.get_write_events(cluster)
+    common = len(group.write_ids & cluster_writes)
 
-    return score / float(len(cluster))
+    return common / float(len(cluster)) * self.score_same_write
 
   def get_score_iso_no_dataplane(self, cur_group, nodataplane):
     """
@@ -374,6 +359,6 @@ class Rank:
     # log summary
     logger.info("Summary:")
     for ind, g in enumerate(self.groups):
-      logger.info("\tGroup %3d: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), g.num_graphs))
-    logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(remaining), num_graphs))
+      logger.info("\tGroup %3d: %4d Clusters, %5d Graphs" % (ind, len(g.clusters), len(g.graphs)))
+    logger.info("\tRemaining:  %4d Clusters, %5d Graphs" % (len(self.remaining), num_graphs))
 

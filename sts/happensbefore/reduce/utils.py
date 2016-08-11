@@ -184,6 +184,19 @@ def has_return_path(graph):
   return False
 
 
+def get_write_events(cluster):
+  """ Returns a set consisting of all write events in a cluster."""
+  # Get the event ids of all write events in the group
+  write_ids = []
+  for graph in cluster:
+    # get leaf nodes
+    for node in (x for x in graph.nodes() if not graph.successors(x)):
+      if is_write_event(node, graph):
+        write_ids.append(node)
+
+  return set(write_ids)
+
+
 def iso_components(graph1, graph2):
   """
   Return True if any components of the graph are isomorphic.

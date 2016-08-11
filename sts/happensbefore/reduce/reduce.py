@@ -132,7 +132,7 @@ class Reduce:
 
     # Generating subgraphs
     self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=preprocessing)
-    self.num_races = len(subgraph)
+    self.num_races = len(self.subgraphs)
     self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
     self.tsubgraph = time.time()
 
