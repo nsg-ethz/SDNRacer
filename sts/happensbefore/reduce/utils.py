@@ -245,6 +245,8 @@ def iso_components(graph1, graph2):
     iso = True
   elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=node_match, edge_match=edge_match):
     iso = True
+  elif nx.is_isomorphic(graph1, graph2, node_match=node_match, edge_match=edge_match):
+    iso = True
 
   return iso
 

@@ -7,6 +7,7 @@ import shutil
 import ConfigParser
 import logging.config
 import argparse
+import json
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
 import hb_graph
@@ -170,6 +171,21 @@ class Reduce:
 
     trank = time.time()
 
+    # Export results
+    self.rank.export_groups()
+
+    # Export data for evaluation
+    eval_dict = self.rank.eval
+    eval_dict['t_total'] = time.time() - self.tstart
+    eval_dict['t_init'] = self.tinit - self.tstart
+    eval_dict['t_subg'] = self.tsubgraph - self.tinit
+    eval_dict['t_prep'] = tpreproc - tstart
+    eval_dict['t_clust'] = tcluster - tpreproc
+    eval_dict['t_rank'] = trank - tcluster
+
+    with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
+      json.dump(eval_dict, outfile)
+
     # summary
     self.logger.info("Summary")
     self.logger.info("Number of Races (subgraphs): %d" % self.num_races)
@@ -185,6 +201,8 @@ class Reduce:
     self.logger.info("\tPreprocessing: %f s" % (tpreproc - tstart))
     self.logger.info("\tClustering: %f s" % (tcluster - tpreproc))
     self.logger.info("\tRanking: %f s" % (trank - tcluster))
+
+    self.rank.print_timing()
 
 
 def auto_int(x):

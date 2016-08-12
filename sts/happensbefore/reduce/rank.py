@@ -2,6 +2,8 @@ import logging.config
 import time
 import os
 import sys
+import random
+import numpy as np
 import networkx as nx
 
 import utils
@@ -17,8 +19,8 @@ class Group:
 
     """
     self.repre = repre                    # Representative Graph
-    self.clusters = [cluster]             # All clusters/Graphs
-    self.graphs = cluster                 # Number of all graphs in a group
+    self.clusters = [cluster]             # All clusters
+    self.graphs = cluster                 # All Graphs
     self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
     self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
     self.single_send = single_send        # Indicates if the race is caused by a single send
@@ -28,6 +30,11 @@ class Group:
   def add_cluster(self, cluster):
     self.clusters.append(cluster)
     self.graphs.extend(cluster)
+
+  def add_group(self, group):
+    self.clusters.extend(group.clusters)
+    self.graphs.extend(group.graphs)
+    self.write_ids.union(group.write_ids)
 
 
 class Rank:
@@ -59,8 +66,185 @@ class Rank:
     self.remaining = []
     self.timing = {}
     self.score_info = {}
+    self.eval = {}
 
   def run(self, clusters):
+    logger.info("Create groups")
+    # create groups out of all clusters
+    tstart = time.time()
+    for cluster in clusters:
+      r = cluster[0]
+      pingpong = utils.substitute_pingpong(r)
+      nodataplane = utils.remove_dataplanetraversals(r)
+      single_send = utils.is_caused_by_single_send(r)
+      return_path = utils.has_return_path(r)
+      write_ids = utils.get_write_events(cluster)
+      self.groups.append(Group(r, cluster, pingpong, nodataplane, single_send, return_path, write_ids))
+    tgroup = time.time()
+
+    # Calculate closeness
+    logger.info("Calculate closeness matrix")
+    # calculate closeness matrix
+    mat = self.get_closeness_matrix()
+    tmatrix = time.time()
+
+    # Partitioning Around Medoids (PAM)
+    medoids, clu, remaining, pam_iter = self.pam(mat)
+    tmedoids = time.time()
+
+    # Put groups together
+    new_groups = []
+    for c_ind, c in enumerate(clu):
+      new_group = self.groups[c[0]]
+      for ind in c[1:]:
+        new_group.add_group(self.groups[ind])
+      new_groups.append(new_group)
+    tassign = time.time()
+
+    self.groups = new_groups
+
+    # Prepare timing dict
+    self.timing['Cluster to groups'] = tgroup - tstart
+    self.timing['Closeness Matrix'] = tmatrix - tgroup
+    self.timing['PAM algorithm'] = tmedoids - tmatrix
+    self.timing['Assign to clusters'] = tassign - tmedoids
+
+    # Prepare eval dict
+    self.eval['num_groups'] = self.num_groups
+    self.eval['score_iso'] = self.score_iso_branch
+    self.eval['score_write'] = self.score_same_write
+    self.eval['score_nodataplane'] = self.score_iso_nodataplane
+    self.eval['score_pingpong'] = self.score_iso_pingpong
+    self.eval['score_single'] = self.score_single_send
+    self.eval['score_return'] = self.score_return_path
+
+  def pam(self, mat):
+    """ Implementation of the Partitioning Around Medoids (k-medoids) clustering method."""
+
+    # Initialization
+    medoids = self.init_medoids()
+    old_medoids = None
+    num_iter = 0
+
+    # algorithm
+    while medoids != old_medoids:
+      logger.debug("Iteration %d, Medoids: %s" % (num_iter, medoids))
+      num_iter += 1
+      old_medoids = medoids[:]
+      clusters = [[x] for x in medoids]
+      remaining = []
+
+      # add all element to the next medoid cluster
+      for ind in xrange(0, len(self.groups)):
+        if ind in medoids:
+          continue
+
+        # Choose closest cluster (highest score in matrix)
+        max_score = 0
+        clust = None
+        for cluster_ind, med in enumerate(medoids):
+          if mat[ind, med] > max_score:
+            max_score = mat[ind, med]
+            clust = cluster_ind
+
+        if clust is None:
+          remaining.append(ind)
+        else:
+          clusters[clust].append(ind)
+
+      # recalculate the cluster medoids (maximize sum of distance)
+      for ind, cluster in enumerate(clusters):
+        max_score = 0
+        new_med = -1
+        for med in cluster:
+          score = sum([mat[med, x] for x in xrange(0, len(self.groups)) if x in cluster])
+          if score > max_score:
+            max_score = score
+            new_med = med
+        medoids[ind] = new_med
+
+    return medoids, clusters, remaining, num_iter
+
+  def init_medoids(self, method='random'):
+    """
+    Initialize the medoids with the choosen method
+
+    Supported methods:
+      'random': Return random medoids."""
+
+    if method.lower() == 'random':
+      if len(self.groups) < self.max_groups:
+        # Todo: stop here, return clusters
+        return xrange(0, len(self.groups))
+      else:
+        return random.sample(xrange(0, len(self.groups)), self.max_groups)
+    else:
+      raise RuntimeError("Invalid method for medoid initialization: %s" % method)
+
+  def get_closeness_matrix(self):
+    mat = np.zeros((len(self.groups), len(self.groups)))
+    for ind1, g1 in enumerate(self.groups):
+      for ind2, g2 in enumerate(self.groups[0:(ind1 + 1)]):
+        if g1 == g2:
+          mat[ind1, ind2] = None
+        mat[ind1, ind2] = self.closeness(g1, g2)
+        mat[ind2, ind1] = self.closeness(g1, g2)
+
+    return mat
+
+  def closeness(self, group1, group2):
+    """
+    Returns the distance between two points.
+    """
+    tot_score = 0
+    # Isomorphic parts
+    score = self.get_score_iso_components(group1, group2)
+    tot_score += score
+    if 'iso' not in self.eval:
+      self.eval['iso'] = []
+    self.eval['iso'].append(score)
+
+    # Same write event
+    score = self.get_score_same_write_event(group1, group2)
+    tot_score += score
+    if 'write' not in self.eval:
+      self.eval['write'] = []
+    self.eval['write'].append(score)
+
+    # Caused by single send
+    score = self.get_score_single_send(group1, group2)
+    tot_score += score
+    if 'single' not in self.eval:
+      self.eval['single'] = []
+    self.eval['single'].append(score)
+
+    # Isomorphic without dataplane traversal
+    score = self.get_score_iso_no_dataplane(group1, group2)
+    tot_score += score
+    if 'dataplane' not in self.eval:
+      self.eval['dataplane'] = []
+    self.eval['dataplane'].append(score)
+
+    # Isomorphic with reduced controller switch pingpong
+    score = self.get_socre_iso_pingpong(group1, group2)
+    tot_score += score
+    if 'pingpong' not in self.eval:
+      self.eval['pingpong'] = []
+    self.eval['pingpong'].append(score)
+
+    # Return path affected
+    score = self.get_score_return_path(group1, group2)
+    if 'return' not in self.eval:
+      self.eval['return'] = []
+    self.eval['return'].append(score)
+
+    if 'total' not in self.eval:
+      self.eval['total'] = []
+    self.eval['total'].append(tot_score)
+
+    return tot_score
+
+  def old_run(self, clusters):
     logger.info("Start Ranking")
     tstart = time.time()
     # Generate Groups
@@ -180,13 +364,13 @@ class Rank:
 
     self.print_scoredict(cluster_scores)
 
-    self.timing['total'] = texport - tstart    # Time Total
-    self.timing['prepare'] = tdict - tstart    # Time to prepare the clusters (score dict)
-    self.timing['groups'] = tgroup - tdict     # Time to build the groups
-    self.timing['assign'] = tassign - tgroup   # Time to assign the clusters to the groups
-    self.timing['export'] = texport - tassign  # Time to export the graphs
+    self.timing['total time'] = texport - tstart    # Time Total
+    self.timing['prepare clusters'] = tdict - tstart    # Time to prepare the clusters (score dict)
+    self.timing['build groups'] = tgroup - tdict     # Time to build the groups
+    self.timing['assign clusters'] = tassign - tgroup   # Time to assign the clusters to the groups
+    self.timing['export groups'] = texport - tassign  # Time to export the graphs
 
-  def calculate_score(self, group, cluster, pingpong, nodataplane, group_ind, cluster_ind):
+  def old_calculate_score(self, group, cluster, pingpong, nodataplane, group_ind, cluster_ind):
     """
     Calculates the likeliness score of cluster to be in group.
     """
@@ -209,115 +393,84 @@ class Rank:
 
     return score
 
-  def get_score_iso_components(self, group, cluster):
+  def get_score_iso_components(self, group1, group2):
     """
     Rank based on isomorphic branches of the graphs. Add score if a graph of cluster has a race brach which is
     isomorphic to a branch of the representative graph of the group.
-
-    Args:
-      group:  RaceGroup
-      cluster:  Cluster to check
-
-    Returns:
-      score
     """
-    return self.score_iso_branch if utils.iso_components(cluster[0], group.repre) else 0
+    return self.score_iso_branch if utils.iso_components(group1.repre, group2.repre) else 0
 
-  def get_score_same_write_event(self, group, cluster):
+  def get_score_same_write_event(self, group1, group2):
     """
     Checks if the races are caused by the same write event. Increases score for each graph that is caused by the same
     write event as one graph from the group
-    Args:
-      group:    rank_group
-      cluster:  cluster to check
-
-    Returns:
-      score
     """
 
     # check how many graphs of the cluster have a write event in common with the group
-    cluster_writes = utils.get_write_events(cluster)
-    common = len(group.write_ids & cluster_writes)
+    factor = len(group1.write_ids & group2.write_ids) / min(len(group1.write_ids), len(group2.write_ids))
 
-    return common / float(len(cluster)) * self.score_same_write
+    return factor * self.score_same_write
 
-  def get_score_iso_no_dataplane(self, cur_group, nodataplane):
+  def get_score_iso_no_dataplane(self, group1, group2):
     """
     Score based on isomorphism of the graphs without dataplane traversals.
-    Args:
-      cur_group:  RaceGroup
-      nodataplane: if a graph is submittet, it is used instead of removing the dataplane events from the cluster
-
-    Returns:
-      score
     """
-    if nodataplane is None or cur_group.repre_nodataplane is None:
+    if group1.repre_nodataplane is None or group2.repre_nodataplane is None:
       return 0
-    elif utils.iso_components(nodataplane, cur_group.repre_nodataplane):
+    elif utils.iso_components(group1.repre_nodataplane, group2.repre_nodataplane):
       return self.score_iso_nodataplane
     else:
       return 0
 
-  def get_socre_iso_pingpong(self, cur_group, pingpong):
+  def get_socre_iso_pingpong(self, group1, group2):
     """
     Score based on isomorphism of the graph components with substituted controller-switch-pingpong.
-    Args:
-      cur_group:  RaceGroup
-      pingpong: If a graph is submittet, it is used instead of calculating the graph with substituted pingpongs
-
-    Returns:
-      score
     """
-    if pingpong is None or cur_group.repre_pingpong is None:
+    if group1.repre_pingpong is None or group2.repre_pingpong is None:
       return 0
-    elif utils.iso_components(pingpong, cur_group.repre_pingpong):
+    elif utils.iso_components(group1.repre_pingpong, group2.repre_pingpong):
       return self.score_iso_nodataplane
     else:
       return 0
 
-  def get_score_single_send(self, cur_group, cluster):
+  def get_score_single_send(self, group1, group2):
     """
-    Score is achieved if both, the representative graph of the current group and the graphs in the cluster are
-    caused by a single send event.
-    Args:
-      cur_group:  RaceGroup
-      cluster:  Cluster to check
-
-    Returns:
-      score
+    Score is achieved if both, the representative graph of the current group and the graphs in the cluster, are
+    caused by a single send event or both aren't.
     """
-    if cur_group.single_send and utils.is_caused_by_single_send(cluster[0]):
+    if group1.single_send == group2.single_send:
       return self.score_single_send
     else:
       return 0
 
-  def get_score_return_path(self, cur_group, cluster):
+  def get_score_return_path(self, group1, group2):
     """
-    Get score if both, the representative graph of the current group and the graphs in the clusters contain a return
-    path.
-    Args:
-      cur_group:  RaceGroup
-      cluster:  Cluster to check
-
-    Returns:
-      score
+    Get score if both, the representative graph of the current group and the graphs in the clusters, either contain a
+    return path or both don't.
     """
-    if cur_group.return_path and utils.has_return_path(cluster[0]):
+    if group1.return_path == group2.return_path:
       return self.score_return_path
     else:
       return 0
 
   def export_groups(self):
+    """ Exports the representative graphs in the result directory and creats a folder for each group
+    to export all informative graphs in the group."""
     for ind, group in enumerate(self.groups):
-      export_path = os.path.join(self.resultdir, 'groups')
+      # Export representative graph
+      nx.write_dot(group.repre, os.path.join(self.resultdir, 'repre_%03d.dot' % ind))
+      # Create folder for the other graphs
+      export_path = os.path.join(self.resultdir, 'group_%03d' % ind)
       if not os.path.exists(export_path):
         os.makedirs(export_path)
-      nx.write_dot(group.repre, os.path.join(export_path, 'repre_%03d.dot' % ind))
-
+      # Export pingpong and nodataplane graphs if they exist
       if group.repre_nodataplane is not None:
-        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'repre_%03d_nodataplane.dot' % ind))
+        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'nodataplane.dot'))
       if group.repre_pingpong is not None:
-        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'repre_%03d_pingpong.dot' % ind))
+        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'pingpong.dot'))
+      # export a graph for each isomorphic cluster
+      for c_ind, cluster in enumerate(group.clusters):
+        nx.write_dot(cluster[0], os.path.join(export_path, 'iso_%03d.dot' % c_ind))
 
   def print_scoredict(self, scoredict):
     logger.debug("Score Dictionary")
@@ -344,11 +497,9 @@ class Rank:
   def print_timing(self):
     """ Logs the timing information."""
     logger.info("Timing:")
-    logger.info("\tBuild score dict:     %10.3f s" % self.timing['prepare'])
-    logger.info("\tGenerate groups:      %10.3f s" % self.timing['groups'])
-    logger.info("\tCalc. score & assign: %10.3f s" % self.timing['assign'])
-    logger.info("\tExport groups:        %10.3f s" % self.timing['assign'])
-    logger.info("\tTOTAL:                %10.3f s" % self.timing['export'])
+
+    for k, v in self.timing.iteritems():
+      logger.info("\t%s: %f s" % (k, v))
 
   def print_summary(self):
     """ Prints the group summary"""

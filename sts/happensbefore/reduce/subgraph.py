@@ -100,8 +100,8 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
     # subg.edge[i][k]['style'] = 'bold'
 
     # Export subgraphs
-    export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
-    nx.write_dot(subg, export_path)
+    # export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
+    # nx.write_dot(subg, export_path)
 
   tconstuct = time.time() - tstart
 
