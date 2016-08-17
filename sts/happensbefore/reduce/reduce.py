@@ -176,6 +176,8 @@ class Reduce:
 
     # Export data for evaluation
     eval_dict = self.rank.eval
+    eval_dict['num_races'] = self.num_races
+    eval_dict['num_clusters'] = len(clusters)
     eval_dict['t_total'] = time.time() - self.tstart
     eval_dict['t_init'] = self.tinit - self.tstart
     eval_dict['t_subg'] = self.tsubgraph - self.tinit

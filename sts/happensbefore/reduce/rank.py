@@ -234,6 +234,7 @@ class Rank:
 
     # Return path affected
     score = self.get_score_return_path(group1, group2)
+    tot_score += score
     if 'return' not in self.eval:
       self.eval['return'] = []
     self.eval['return'].append(score)
@@ -407,7 +408,10 @@ class Rank:
     """
 
     # check how many graphs of the cluster have a write event in common with the group
-    factor = len(group1.write_ids & group2.write_ids) / min(len(group1.write_ids), len(group2.write_ids))
+    if len(group1.write_ids) > 0 and len(group2.write_ids) > 0:
+      factor = len(group1.write_ids & group2.write_ids) / min(len(group1.write_ids), len(group2.write_ids))
+    else:
+      factor = 0
 
     return factor * self.score_same_write
 

@@ -7,7 +7,7 @@ from sts.input_traces.input_logger import InputLogger
 from sts.simulation_state import SimulationConfig
 from sts.happensbefore.hb_logger import HappensBeforeLogger
 
-start_cmd = '''tail -f "/home/sdnracer/Applications/apache-karaf-3.0.5/data/log/karaf.log"'''
+start_cmd = '''tail -f "/home/roman/sdnracer/Applications/apache-karaf-3.0.5/data/log/karaf.log"'''
 
 # controllers = [ControllerConfig(start_cmd, controller_type='dummy', cwd='./', address="192.168.56.101", port=6633)]
 controllers = [ControllerConfig(start_cmd, controller_type='logfile', cwd='./')]
@@ -28,16 +28,16 @@ controllers = [ControllerConfig(start_cmd, controller_type='logfile', cwd='./')]
 ############
 # "Linear" #
 ############
-num = 2
-topology_class = MeshTopology
-topology_params = "num_switches=%d" % num
+#num = 2
+#topology_class = MeshTopology
+#topology_params = "num_switches=%d" % num
 
 ############
 # "BinTree" #
 ############
-# num = 2
-# topology_class = BinaryLeafTreeTopology
-# topology_params = "num_levels=%d" % num
+num = 2
+topology_class = BinaryLeafTreeTopology
+topology_params = "num_levels=%d" % num
 
 # Increase this value to get longer traces
 steps = 200

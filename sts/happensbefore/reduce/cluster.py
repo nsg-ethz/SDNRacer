@@ -26,7 +26,6 @@ class Cluster:
       logger.debug("Skip Isomorphic clustering")
 
     self.write_clusters_info(clusters)
-    #self.export_cluster_graphs(clusters, 'iso_cluster')
 
     return clusters
 

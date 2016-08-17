@@ -31,7 +31,7 @@ topology_params = "num_levels=%d" % num
 
 steps = 200
 # Where should the output files be written to
-results_dir = "traces/trace_pox_eel_learningswitch-%s%d-steps%s" % (topology_class.__name__, num, steps)
+results_dir = "results/pox_eel_learningswitch-%s%d-steps%s" % (topology_class.__name__, num, steps)
 
 apps = None
 

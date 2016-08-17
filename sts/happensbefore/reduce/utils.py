@@ -43,10 +43,16 @@ def remove_dataplanetraversals(g):
 
   # Now remove all DataplaneTraversals
   stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+  visited = []
 
   found_dataplanetraversal = False
   while stack:
     node = stack.pop()
+    if node in visited:
+      continue
+    else:
+      visited.append(node)
+
     stack.extend(graph.successors(node))
     if graph.node[node]['event'] == 'DataplaneTraversal':
       found_dataplanetraversal = True
@@ -71,9 +77,14 @@ def substitute_pingpong(g):
   # Now check for controller-switch-pingpong
   stack = [x for x in graph.nodes() if not graph.predecessors(x)]
   found_pingpong = False
+  visited = []
 
   while stack:
     curr_node = stack.pop()
+    if curr_node in visited:
+      continue
+    else:
+      visited.append(curr_node)
 
     if graph.node[curr_node]['event'] == 'ControllerHandle':
       # Found first controllerhandle -> No get dpid of switch
@@ -165,9 +176,13 @@ def has_return_path(graph):
   """
   # Traverse graph
   stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-
+  visited = []
   while stack:
     node = stack.pop()
+    if node in visited:
+      continue
+    else:
+      visited.append((node))
     stack.extend(graph.successors(node))
     # Check both cases: either a substituted DataplaneTraversal or the original HostHandle event
     if graph.node[node]['event'] == 'DataplaneTraversal':

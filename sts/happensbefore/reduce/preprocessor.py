@@ -202,7 +202,8 @@ class Preprocessor:
     logger.info("Remove dispensable pid edges...")
     new_subgraphs = []
 
-    for subg in subgraphs:
+    for ind, subg in enumerate(subgraphs):
+      logger.debug("\t Subgraph %d" % ind)
       new_subgraphs.append(self._remove_dispensable_pid_edges(subg))
 
     return new_subgraphs
@@ -218,11 +219,16 @@ class Preprocessor:
     """
     # get all root nodes
     stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+    visited = []
 
     while stack:
       curr_node = stack.pop()
+      if curr_node in visited:
+        continue
+      else:
+        visited.append(curr_node)
 
-      # Check if there are two successors
+      # Check if there are not exactly two successors -> continue with successors
       suc = graph.successors(curr_node)
       if not len(suc) == 2:
         stack.extend(suc)
