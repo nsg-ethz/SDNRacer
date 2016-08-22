@@ -22,7 +22,7 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
   Returns: List of subgraphs
   """
   logger.debug("Get_subgraphs...")
-  tstart = time.time()
+  tstart = time.clock()
 
   # Use a copy of the graph
   cg = hb_graph.g.copy()
@@ -52,16 +52,16 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
   # convert to set for faster lookup
   race_ids = set(race_ids)
 
-  tprepare = time.time() - tstart
-  tstart = time.time()
+  tprepare = time.clock() - tstart
+  tstart = time.clock()
 
   # preprocess graph
   if preprocessing:
     # remove all dispensable nodes
     remove_dispensable_nodes(cg, race_ids)
 
-  tpreprocess = time.time() - tstart
-  tstart = time.time()
+  tpreprocess = time.clock() - tstart
+  tstart = time.clock()
 
   # find paths
   for ind, send in enumerate(hb_graph.host_sends):
@@ -72,8 +72,8 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
         # last element is the race event id
         all_paths[paths[-1]].append(paths)
 
-  tfindpaths = time.time() - tstart
-  tstart = time.time()
+  tfindpaths = time.clock() - tstart
+  tstart = time.clock()
 
   # Now construct the subgraphs
   subgraphs = []
@@ -103,7 +103,7 @@ def get_subgraphs(hb_graph, resultdir, preprocessing=True):
     # export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
     # nx.write_dot(subg, export_path)
 
-  tconstuct = time.time() - tstart
+  tconstuct = time.clock() - tstart
 
   # Uncomment to export a graph containing all subgraphs (slow!)
   # export_path = os.path.join(resultdir, "subg_all.dot")
@@ -185,7 +185,7 @@ def remove_dispensable_nodes(hb_graph, race_ids):
   logger.debug("Remove_dispensable nodes...")
   logger.debug("Total nodes before removal: %d" % hb_graph.number_of_nodes())
 
-  tstart = time.time()
+  tstart = time.clock()
   nodes_removed = 1
   tot_nodes_removed = 0
   while nodes_removed > 0:
@@ -204,7 +204,7 @@ def remove_dispensable_nodes(hb_graph, race_ids):
   for race in race_ids:
     assert hb_graph.has_node(race), "Race event with id %s not in graph" % race
 
-  logger.debug("Removed %s nodes in %f seconds" % (tot_nodes_removed, time.time() - tstart))
+  logger.debug("Removed %s nodes in %f seconds" % (tot_nodes_removed, time.clock() - tstart))
   logger.debug("Total nodes after removal: %d" % hb_graph.number_of_nodes())
 
   return hb_graph

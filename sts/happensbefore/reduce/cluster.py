@@ -39,7 +39,7 @@ class Cluster:
     Returns: New list of clusters
 
     """
-    tstart = time.time()
+    tstart = time.clock()
     new_clusters = []
 
     # cluster isomorphic clusters based on the first subgraph in the cluster
@@ -59,7 +59,7 @@ class Cluster:
     new_clusters.sort(key=len, reverse=True)
 
     # Log info
-    logger.info("Timing Iso: %f" % (time.time() - tstart))
+    logger.info("Timing Iso: %f" % (time.clock() - tstart))
     logger.info("Clusters before iso: %d" % (len(clusters)))
     logger.info("Clusters after iso:  %d" % (len(new_clusters)))
 

@@ -159,6 +159,55 @@ def substitute_pingpong(g):
   return graph if found_pingpong else None
 
 
+def contains_pingpong(graph):
+  """
+  Returns True if graph contains a controller-switch-pingpong of False if not
+  """
+  # Now check for controller-switch-pingpong
+  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+  visited = []
+
+  while stack:
+    curr_node = stack.pop()
+    if curr_node in visited:
+      continue
+    else:
+      visited.append(curr_node)
+
+    if graph.node[curr_node]['event'] == 'ControllerHandle':
+      # Found first controllerhandle -> No get dpid of switch
+      pre = graph.predecessors(curr_node)
+      suc = graph.successors(curr_node)
+      dpid = graph.node[pre[0]]['event'].dpid
+
+      if len(pre) != 1 or len(suc) != 1:
+        # Not PingPong -> continue with successors
+        stack.extend(suc)
+        continue
+
+      # Check if the next node is a MessageHandle with the same dpid
+      if not (isinstance(graph.node[suc[0]]['event'], hb_events.HbMessageHandle) or
+              graph.node[suc[0]]['event'].dpid == dpid):
+        # Not PingPong -> continue with successors
+        stack.extend(suc)
+        continue
+
+      # Check if the event after is again a controllerhandle
+      node = graph.successors(suc[0])
+      if not len(node) == 1 or not graph.node[node[0]]['event'] == 'ControllerHandle':
+        # Not PingPong -> continue with successors
+        stack.extend(suc)
+        continue
+
+      # Found Controller-Switch-PingPong
+      return True
+
+    else:
+      stack.extend(graph.successors(curr_node))
+
+  return False
+
+
 def is_caused_by_single_send(graph):
   """
   Returns if the race is caused by a single send (e.g. one host send).

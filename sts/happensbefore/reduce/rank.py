@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Group:
-  def __init__(self, repre, cluster, pingpong, nodataplane, single_send, return_path, write_ids):
+  def __init__(self, repre, cluster, pingpong, c_pingpong, nodataplane, single_send, return_path, write_ids):
     """
     Class to store the rank groups (group of subgraphs). Each group has a score, representative graph to show to the user
     and a list of all clusters contained in the group.
@@ -21,8 +21,7 @@ class Group:
     self.repre = repre                    # Representative Graph
     self.clusters = [cluster]             # All clusters
     self.graphs = cluster                 # All Graphs
-    self.repre_pingpong = pingpong        # Graph w/o controller-switch-pingpong (substituted node)
-    self.repre_nodataplane = nodataplane  # Representative graph without dataplane traversal
+    self.contains_pingpong = c_pingpong   # Indicates if the graph contains a controller-switch-pingpong
     self.single_send = single_send        # Indicates if the race is caused by a single send
     self.return_path = return_path        # Indicates if there is a HostHandle -> return path is affected
     self.write_ids = write_ids            # Set of all write-ids
@@ -32,9 +31,21 @@ class Group:
     self.graphs.extend(cluster)
 
   def add_group(self, group):
+    # Representative graph is the one from the bigger group
+    if len(group.graphs) > len(self.graphs):
+      self.repre = group.repre
+
+    # Add clusters and graphs from the added group
     self.clusters.extend(group.clusters)
     self.graphs.extend(group.graphs)
+
+    # Add write ids
     self.write_ids.union(group.write_ids)
+
+    # The booleans are true if any of the two groups are true
+    self.contains_pingpong = self.contains_pingpong or group.contains_pingpong
+    self.single_send = self.single_send or group.single_send
+    self.return_path = self.return_path or group.return_path
 
 
 class Rank:
@@ -44,418 +55,233 @@ class Rank:
 
   def __init__(self, resultdir, max_groups=5,
                score_same_write=1,
-               score_iso_branch=1,
-               score_iso_nodataplane=1,
-               score_iso_pingpong=1,
+               score_iso_components=1,
+               score_contains_pingpong=1,
                score_single_send=1,
                score_return_path=1,
                min_score=1,
                threshold=1):
     self.resultdir = resultdir
     self.max_groups = int(max_groups)
-    self.score_iso_branch = float(score_iso_branch)
-    self.score_same_write = float(score_same_write)
-    self.score_iso_nodataplane = float(score_iso_nodataplane)
-    self.score_iso_pingpong = float(score_iso_pingpong)
-    self.score_single_send = float(score_single_send)
-    self.score_return_path = float(score_return_path)
-    self.min_score = float(min_score)
+
+    # Create score dictionary for all scores != 0. Form: 'function_name': score
+    self.score_dict = {}
+    if float(score_iso_components) != 0:
+      self.score_dict['iso_components'] = float(score_iso_components)
+    if float(score_same_write) != 0:
+      self.score_dict['common_write_event'] = float(score_same_write)
+    if float(score_contains_pingpong) != 0:
+      self.score_dict['pingpong'] = float(score_contains_pingpong)
+    if float(score_single_send) != 0:
+      self.score_dict['single_send'] = float(score_single_send)
+    if float(score_return_path) != 0:
+      self.score_dict['return_path'] = float(score_return_path)
+
+    # Maximum score
+    self.max_score = sum(self.score_dict.values())
+
+    # Threshold for the clustering algorithm
     self.threshold = float(threshold)
     self.num_groups = 0
     self.groups = []
     self.remaining = []
     self.timing = {}
     self.score_info = {}
-    self.eval = {}
+
+    # Dictionary for the evaluation
+    self.eval = {'general': {},
+                 'score': {},
+                 'time': {}}
 
   def run(self, clusters):
     logger.info("Create groups")
     # create groups out of all clusters
-    tstart = time.time()
+    tstart = time.clock()
     for cluster in clusters:
       r = cluster[0]
-      pingpong = utils.substitute_pingpong(r)
-      nodataplane = utils.remove_dataplanetraversals(r)
+      pingpong = None  # utils.substitute_pingpong(r)
+      c_pingpong = utils.contains_pingpong(r)
+      nodataplane = None  # utils.remove_dataplanetraversals(r)
       single_send = utils.is_caused_by_single_send(r)
       return_path = utils.has_return_path(r)
       write_ids = utils.get_write_events(cluster)
-      self.groups.append(Group(r, cluster, pingpong, nodataplane, single_send, return_path, write_ids))
-    tgroup = time.time()
+      self.groups.append(Group(r, cluster, pingpong, c_pingpong, nodataplane, single_send, return_path, write_ids))
+    self.eval['time']['Cluster to groups'] = time.clock() - tstart
 
-    # Calculate closeness
-    logger.info("Calculate closeness matrix")
+    # Clustering
+    tstart = time.clock()
+    self.groups = self.cluster()
+    self.eval['time']['Clustering'] = time.clock() - tstart
+
+
+  def cluster(self):
+    """ Clustering with DBScan"""
+    tstart = time.clock()
+    # First get the closeness matrix
+    logger.info("Calculate distance matrix")
     # calculate closeness matrix
-    mat = self.get_closeness_matrix()
-    tmatrix = time.time()
+    dist_mat = self.get_distance_matrix()
+    self.eval['time']['Calculate distance matrix'] = time.clock() - tstart
 
-    # Partitioning Around Medoids (PAM)
-    medoids, clu, remaining, pam_iter = self.pam(mat)
-    tmedoids = time.time()
+    # DBScan
+    tstart = time.clock()
+    eps = 2           # eps-neighborhood: all points within distance eps around p
+    min_points = 5   # Minimum number of points in eps-neighborhood to be a core point
+    visited = []
+    outliers = []
+    clusters = []
+    in_cluster = []
 
-    # Put groups together
+    # Process all elements (indices in group list and distance matrix)
+    for element in range(0, len(self.groups)):
+      if element in visited:
+        continue
+
+      visited.append(element)
+      neighbors = self.get_neighbors(element, eps, dist_mat)
+      # If less then min_points in neighborhood -> outlier
+      if len(neighbors) < min_points:
+        outliers.append(element)
+        continue
+
+      # Element is a core point -> new cluster
+      cluster = [element]
+      in_cluster.append(element)
+
+      # Add all points in the expanded neighborhood to this cluster
+      while neighbors:
+        neighbor = neighbors.pop()
+        # If this point is not part of any cluster add it
+        if neighbor not in in_cluster:
+          cluster.append(neighbor)
+          in_cluster.append(neighbor)
+
+        # If the neighbor was not visited, check the neighborhood, if its a core point -> add its neighbors
+        if neighbor not in visited:
+          visited.append(neighbor)
+          n_neighbors = self.get_neighbors(neighbor, eps, dist_mat)
+          if len(neighbors) >= min_points:
+            neighbors.extend(n_neighbors)
+
+      clusters.append(cluster)
+
+    self.eval['time']['DBScan'] = time.clock() - tstart
+
+    # Different validation checks
+    tstart = time.clock()
+    # Check if all elements are visited exactly once
+    assert len(visited) == len(set(visited)), "DBScan: Dublicates in visited."
+    assert set(visited) == set(range(0, len(self.groups))), "DBScan: Not all elements in visited"
+
+    # Check if in_cluster is complete and there is no element in more than one cluster
+    complete_in_clusters = []
+    for c in clusters:
+      complete_in_clusters.extend(c)
+    assert len(complete_in_clusters) == len(set(complete_in_clusters)), "DBScan: Same element in more than one cluster"
+    assert set(in_cluster) == set(complete_in_clusters), "DBScan: in_cluster not complete"
+
+    # Check if there are dublicate elements in outliers
+    assert len(outliers) == len(set(outliers)), "DBScan: Dublicates in outliers"
+
+    # Check if each element is either in a cluster or in outliers
+    all_elements = set(in_cluster + outliers)
+    assert all_elements == set(visited), "DBScan: Not all elements processed"
+
+    self.eval['time']['DBScan Checks'] = time.clock() - tstart
+
+    # Create the new groups
+    tstart = time.clock()
     new_groups = []
-    for c_ind, c in enumerate(clu):
-      new_group = self.groups[c[0]]
-      for ind in c[1:]:
-        new_group.add_group(self.groups[ind])
-      new_groups.append(new_group)
-    tassign = time.time()
+    for cluster in clusters:
+      curr_group = self.groups[cluster[0]]
+      for group in cluster[1:]:
+        curr_group.add_group(self.groups[group])
 
-    self.groups = new_groups
+      new_groups.append(curr_group)
 
-    # Prepare timing dict
-    self.timing['Cluster to groups'] = tgroup - tstart
-    self.timing['Closeness Matrix'] = tmatrix - tgroup
-    self.timing['PAM algorithm'] = tmedoids - tmatrix
-    self.timing['Assign to clusters'] = tassign - tmedoids
+    # Put outliers in remaining
+    for group in outliers:
+      self.remaining.append(self.groups[group].clusters)
 
-    # Prepare eval dict
-    self.eval['num_groups'] = self.num_groups
-    self.eval['score_iso'] = self.score_iso_branch
-    self.eval['score_write'] = self.score_same_write
-    self.eval['score_nodataplane'] = self.score_iso_nodataplane
-    self.eval['score_pingpong'] = self.score_iso_pingpong
-    self.eval['score_single'] = self.score_single_send
-    self.eval['score_return'] = self.score_return_path
+    return new_groups
 
-  def pam(self, mat):
-    """ Implementation of the Partitioning Around Medoids (k-medoids) clustering method."""
-
-    # Initialization
-    medoids = self.init_medoids()
-    old_medoids = None
-    num_iter = 0
-
-    # algorithm
-    while medoids != old_medoids:
-      logger.debug("Iteration %d, Medoids: %s" % (num_iter, medoids))
-      num_iter += 1
-      old_medoids = medoids[:]
-      clusters = [[x] for x in medoids]
-      remaining = []
-
-      # add all element to the next medoid cluster
-      for ind in xrange(0, len(self.groups)):
-        if ind in medoids:
-          continue
-
-        # Choose closest cluster (highest score in matrix)
-        max_score = 0
-        clust = None
-        for cluster_ind, med in enumerate(medoids):
-          if mat[ind, med] > max_score:
-            max_score = mat[ind, med]
-            clust = cluster_ind
-
-        if clust is None:
-          remaining.append(ind)
-        else:
-          clusters[clust].append(ind)
-
-      # recalculate the cluster medoids (maximize sum of distance)
-      for ind, cluster in enumerate(clusters):
-        max_score = 0
-        new_med = -1
-        for med in cluster:
-          score = sum([mat[med, x] for x in xrange(0, len(self.groups)) if x in cluster])
-          if score > max_score:
-            max_score = score
-            new_med = med
-        medoids[ind] = new_med
-
-    return medoids, clusters, remaining, num_iter
-
-  def init_medoids(self, method='random'):
+  def get_neighbors(self, p, eps, dist_mat):
     """
-    Initialize the medoids with the choosen method
+    Returns all points around p within max distance of eps (including p)
+    """
+    neighbors = []
+    for ind, x in enumerate(dist_mat[p]):
+      if x <= eps:
+        neighbors.append(ind)
 
-    Supported methods:
-      'random': Return random medoids."""
+    return neighbors
 
-    if method.lower() == 'random':
-      if len(self.groups) < self.max_groups:
-        # Todo: stop here, return clusters
-        return xrange(0, len(self.groups))
-      else:
-        return random.sample(xrange(0, len(self.groups)), self.max_groups)
-    else:
-      raise RuntimeError("Invalid method for medoid initialization: %s" % method)
-
-  def get_closeness_matrix(self):
+  def get_distance_matrix(self):
     mat = np.zeros((len(self.groups), len(self.groups)))
     for ind1, g1 in enumerate(self.groups):
       for ind2, g2 in enumerate(self.groups[0:(ind1 + 1)]):
         if g1 == g2:
-          mat[ind1, ind2] = None
-        mat[ind1, ind2] = self.closeness(g1, g2)
-        mat[ind2, ind1] = self.closeness(g1, g2)
+          mat[ind1, ind2] = 0
+        mat[ind1, ind2] = self.distance(g1, g2)
+        mat[ind2, ind1] = mat[ind1, ind2]
 
     return mat
 
-  def closeness(self, group1, group2):
+  def distance(self, group1, group2):
     """
-    Returns the distance between two points.
+    Returns the distance between two graphs.
     """
     tot_score = 0
-    # Isomorphic parts
-    score = self.get_score_iso_components(group1, group2)
-    tot_score += score
-    if 'iso' not in self.eval:
-      self.eval['iso'] = []
-    self.eval['iso'].append(score)
 
-    # Same write event
-    score = self.get_score_same_write_event(group1, group2)
-    tot_score += score
-    if 'write' not in self.eval:
-      self.eval['write'] = []
-    self.eval['write'].append(score)
+    # Execute all scoring functions and save score for evaluation
+    for f, score in self.score_dict.iteritems():
+      if getattr(self, f)(group1, group2):
+        tot_score += score
+        self.eval['score'][f] = score
+      else:
+        self.eval['score'][f] = 0
 
-    # Caused by single send
-    score = self.get_score_single_send(group1, group2)
-    tot_score += score
-    if 'single' not in self.eval:
-      self.eval['single'] = []
-    self.eval['single'].append(score)
+    # Invert score (closeness to distance)
+    return self.max_groups - tot_score
 
-    # Isomorphic without dataplane traversal
-    score = self.get_score_iso_no_dataplane(group1, group2)
-    tot_score += score
-    if 'dataplane' not in self.eval:
-      self.eval['dataplane'] = []
-    self.eval['dataplane'].append(score)
-
-    # Isomorphic with reduced controller switch pingpong
-    score = self.get_socre_iso_pingpong(group1, group2)
-    tot_score += score
-    if 'pingpong' not in self.eval:
-      self.eval['pingpong'] = []
-    self.eval['pingpong'].append(score)
-
-    # Return path affected
-    score = self.get_score_return_path(group1, group2)
-    tot_score += score
-    if 'return' not in self.eval:
-      self.eval['return'] = []
-    self.eval['return'].append(score)
-
-    if 'total' not in self.eval:
-      self.eval['total'] = []
-    self.eval['total'].append(tot_score)
-
-    return tot_score
-
-  def old_run(self, clusters):
-    logger.info("Start Ranking")
-    tstart = time.time()
-    # Generate Groups
-    # cluster list to store all scores and to which group they are assignes
-    # Form: {'cluster': list_of_graphs, 'group': group_number, 'scores': [score_group_1, score_group_2, ...]}
-    clusters.sort(key=len, reverse=True)
-    cluster_scores = []
-    for c in clusters:
-      cluster_dict = {'cluster': c,
-                      'pingpong': utils.substitute_pingpong(c[0]),
-                      'nodataplane': utils.remove_dataplanetraversals(c[0]),
-                      'group': None,
-                      'scores': []}
-      cluster_scores.append(cluster_dict)
-
-    tdict = time.time()
-
-    # First generate self.max_groups groups
-    # Approach:
-    #   - Put the first cluster (biggest) in the first group
-    #   - Calculate score of all other clusters for this group
-    #   - Put biggest cluster with smallest score in new group
-    #   - Repeat until all groups are created
-    #   Note: in repetive steps, use biggest cluster with lowest score for all groups
-    logger.info("Generate Groups")
-    cluster_ind = 0
-
-    while len(self.groups) < self.max_groups and cluster_ind is not None:
-      logger.debug("Generate group %d" % len(self.groups))
-
-      # Generate next group
-      c = cluster_scores[cluster_ind]['cluster']
-      r = c[0]
-      pingpong = utils.substitute_pingpong(r)
-      nodataplane = utils.remove_dataplanetraversals(r)
-      single_send = utils.is_caused_by_single_send(r)
-      return_path = utils.has_return_path(r)
-      write_ids = utils.get_write_events(c)
-      self.groups.append(Group(r, c, pingpong, nodataplane, single_send, return_path, write_ids))
-
-      # prepare next step
-      cur_group = len(self.groups) - 1
-      cluster_scores[cluster_ind]['group'] = cur_group
-
-      # Calculate the score for all other clusters
-      for cluster_ind, cluster_dict in enumerate(cluster_scores):
-        # Only continue if the current cluster is not assigned yet
-        if cluster_dict['group'] is None:
-          score = self.calculate_score(self.groups[cur_group],
-                                       cluster_dict['cluster'],
-                                       cluster_dict['pingpong'],
-                                       cluster_dict['nodataplane'],
-                                       cur_group, cluster_ind)
-          cluster_dict['scores'].append(score)
-
-      # Get biggest cluster with lowest overall score
-      min_score = sys.maxint
-      cluster_ind = None
-      for ind, cluster_dict in enumerate(cluster_scores):
-        # Only consider unassigned clusters
-        if cluster_dict['group'] is not None:
-          continue
-
-        # Check if there is a higher score than threshold -> continue with next
-        if max(cluster_dict['scores']) > self.threshold:
-          continue
-
-        # Get score, Ignore scores for groups which are not calculated yet
-        score = sum(cluster_dict['scores'])
-
-        # Clusters are ordered in size, so the first graph with the smallest score is always the biggest
-        if score == 0:
-          cluster_ind = ind
-          break
-
-        elif score < min_score:
-          min_score = score
-          cluster_ind = ind
-
-    tgroup = time.time()
-    logger.info("Assign clusters to groups")
-
-    # Now calculate the score for all clusters and groups
-    num_graphs = 0
-    for cluster_ind, cluster_dict in enumerate(cluster_scores):
-      # Only calculate score if not already assigned
-      if cluster_dict['group'] is None:
-        for group_ind in range(0, len(self.groups)):
-          if len(cluster_dict['scores']) <= ind:
-            cluster_dict['scores'].append(self.calculate_score(self.groups[group_ind],
-                                                               cluster_dict['cluster'],
-                                                               cluster_dict['pingpong'],
-                                                               cluster_dict['nodataplane'],
-                                                               group_ind, cluster_ind))
-
-        # If a cluster has score 0 for all groups or the max score is below the threshold -> put it in "Remaining"
-        if sum(cluster_dict['scores']) == 0 or max(cluster_dict['scores']) < self.min_score:
-          self.remaining.append(cluster_dict['cluster'])
-          num_graphs += len(cluster_dict['cluster'])
-
-        else:
-          # Now assign the cluster to the group with the highest score
-          # (take the first if there are multiple with the same score)
-          max_score_ind = cluster_dict['scores'].index(max(cluster_dict['scores']))
-          cluster_dict['group'] = max_score_ind
-          self.groups[max_score_ind].add_cluster(cluster_dict['cluster'])
-
-    logger.info("Export Graphs")
-    tassign = time.time()
-
-    #self.groups.sort(key=lambda x: x.num_graphs, reverse=True)
-    self.export_groups()
-
-    texport = time.time()
-
-    logger.info("Finished ranking")
-
-    self.print_scoredict(cluster_scores)
-
-    self.timing['total time'] = texport - tstart    # Time Total
-    self.timing['prepare clusters'] = tdict - tstart    # Time to prepare the clusters (score dict)
-    self.timing['build groups'] = tgroup - tdict     # Time to build the groups
-    self.timing['assign clusters'] = tassign - tgroup   # Time to assign the clusters to the groups
-    self.timing['export groups'] = texport - tassign  # Time to export the graphs
-
-  def old_calculate_score(self, group, cluster, pingpong, nodataplane, group_ind, cluster_ind):
+  def iso_components(self, group1, group2):
     """
-    Calculates the likeliness score of cluster to be in group.
+    Returns True if one or more components (separate branches) of the representative graphs of the two groups are
+    isomorphic.
     """
-    # Isomorphic parts
-    iso_score = self.get_score_iso_components(group, cluster)
+    return utils.iso_components(group1.repre, group2.repre)
 
-    # Same write event
-    same_write_score = self.get_score_same_write_event(group, cluster)
-
-    # Caused by single send
-    singe_send_score = self.get_score_single_send(group, cluster)
-
-    # Isomorphic without dataplane traversal
-    no_dataplane_score = self.get_score_iso_no_dataplane(group, nodataplane)
-
-    # Isomorphic with reduced controller switch pingpong
-    pingpong_score = self.get_socre_iso_pingpong(group, pingpong)
-
-    score = iso_score + same_write_score + singe_send_score + no_dataplane_score + pingpong_score
-
-    return score
-
-  def get_score_iso_components(self, group1, group2):
+  def common_write_event(self, group1, group2):
     """
-    Rank based on isomorphic branches of the graphs. Add score if a graph of cluster has a race brach which is
-    isomorphic to a branch of the representative graph of the group.
+    Returns True if the two groups have write race-event ids in common.
     """
-    return self.score_iso_branch if utils.iso_components(group1.repre, group2.repre) else 0
+    # Check if the sets are not empty
+    if not len(group1.write_ids) > 0 or not len(group2.write_ids) > 0:
+      # Should not happen, export graphs and raise error
+      nx.write_dot(group1.repre, os.path.join(self.resultdir, 'error_group1.dot'))
+      nx.write_dot(group2.repre, os.path.join(self.resultdir, 'error_group2.dot'))
+      raise RuntimeError("One ore more groups contain no write ids! See exported graphs.")
 
-  def get_score_same_write_event(self, group1, group2):
-    """
-    Checks if the races are caused by the same write event. Increases score for each graph that is caused by the same
-    write event as one graph from the group
-    """
+    # Give score if they have at least one common element
+    return not group1.write_ids.isdisjoint(group2.write_ids)
 
-    # check how many graphs of the cluster have a write event in common with the group
-    if len(group1.write_ids) > 0 and len(group2.write_ids) > 0:
-      factor = len(group1.write_ids & group2.write_ids) / min(len(group1.write_ids), len(group2.write_ids))
-    else:
-      factor = 0
+  def pingpong(self, group1, group2):
+    """ Returns True if both graphs contain a controller-switch-pingpong or both don't"""
+    return group1.contains_pingpong == group2.contains_pingpong
 
-    return factor * self.score_same_write
-
-  def get_score_iso_no_dataplane(self, group1, group2):
+  def single_send(self, group1, group2):
     """
-    Score based on isomorphism of the graphs without dataplane traversals.
-    """
-    if group1.repre_nodataplane is None or group2.repre_nodataplane is None:
-      return 0
-    elif utils.iso_components(group1.repre_nodataplane, group2.repre_nodataplane):
-      return self.score_iso_nodataplane
-    else:
-      return 0
-
-  def get_socre_iso_pingpong(self, group1, group2):
-    """
-    Score based on isomorphism of the graph components with substituted controller-switch-pingpong.
-    """
-    if group1.repre_pingpong is None or group2.repre_pingpong is None:
-      return 0
-    elif utils.iso_components(group1.repre_pingpong, group2.repre_pingpong):
-      return self.score_iso_nodataplane
-    else:
-      return 0
-
-  def get_score_single_send(self, group1, group2):
-    """
-    Score is achieved if both, the representative graph of the current group and the graphs in the cluster, are
+    Returns True if both, the representative graph of the current group and the graphs in the cluster, are
     caused by a single send event or both aren't.
     """
-    if group1.single_send == group2.single_send:
-      return self.score_single_send
-    else:
-      return 0
+    return group1.single_send == group2.single_send
 
-  def get_score_return_path(self, group1, group2):
+  def return_path(self, group1, group2):
     """
-    Get score if both, the representative graph of the current group and the graphs in the clusters, either contain a
+    Returns True if both, the representative graph of the current group and the graphs in the clusters, either contain a
     return path or both don't.
     """
-    if group1.return_path == group2.return_path:
-      return self.score_return_path
-    else:
-      return 0
+    return group1.return_path == group2.return_path
 
   def export_groups(self):
     """ Exports the representative graphs in the result directory and creats a folder for each group
@@ -467,42 +293,14 @@ class Rank:
       export_path = os.path.join(self.resultdir, 'group_%03d' % ind)
       if not os.path.exists(export_path):
         os.makedirs(export_path)
-      # Export pingpong and nodataplane graphs if they exist
-      if group.repre_nodataplane is not None:
-        nx.write_dot(group.repre_nodataplane, os.path.join(export_path, 'nodataplane.dot'))
-      if group.repre_pingpong is not None:
-        nx.write_dot(group.repre_pingpong, os.path.join(export_path, 'pingpong.dot'))
-      # export a graph for each isomorphic cluster
       for c_ind, cluster in enumerate(group.clusters):
         nx.write_dot(cluster[0], os.path.join(export_path, 'iso_%03d.dot' % c_ind))
-
-  def print_scoredict(self, scoredict):
-    logger.debug("Score Dictionary")
-    num = self.max_groups
-    len_cluster = 5
-    sep_line = '-' * (4 + len_cluster + (num * 9))
-    title = '|      |' + ' %6d |' * num
-
-    logger.debug(sep_line)
-    logger.debug(title % tuple(range(0, num)))
-    logger.debug(sep_line)
-
-    for ind, cluster_dict in enumerate(scoredict):
-      line = '| %4d |' % ind
-      for score in cluster_dict['scores']:
-        if score is None:
-          line += '  None  |'
-        else:
-          line += ' %6.4f |' % score
-      logger.debug(line)
-
-    logger.debug(sep_line)
 
   def print_timing(self):
     """ Logs the timing information."""
     logger.info("Timing:")
 
-    for k, v in self.timing.iteritems():
+    for k, v in self.eval['time'].iteritems():
       logger.info("\t%s: %f s" % (k, v))
 
   def print_summary(self):

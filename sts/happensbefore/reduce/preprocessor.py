@@ -30,15 +30,15 @@ class Preprocessor:
     # Remove dispensable pid edges
     if self.remove_pid:
       logger.debug('Remove dispensable pid edges')
-      tstart = time.time()
+      tstart = time.clock()
       subgraphs = self.remove_dispensable_pid_edges(subgraphs)
-      logger.debug('\tTime: %f s' % (time.time() - tstart))
+      logger.debug('\tTime: %f s' % (time.clock() - tstart))
 
     if self.substitute:
       logger.debug('Detect and substitute patterns')
-      tstart = time.time()
+      tstart = time.clock()
       subgraphs = self.substitute_patterns(subgraphs)
-      logger.debug('\tTime: %f s' % (time.time() - tstart))
+      logger.debug('\tTime: %f s' % (time.clock() - tstart))
 
     return subgraphs
 

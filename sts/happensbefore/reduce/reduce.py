@@ -14,7 +14,7 @@ import hb_graph
 
 class Reduce:
   def __init__(self, hb_graph, trace_file):
-    self.tstart = time.time()
+    self.tstart = time.clock()
 
     print ""
     print ""
@@ -78,7 +78,7 @@ class Reduce:
     # graph data
     self.hb_graph = hb_graph
 
-    self.tinit = time.time()
+    self.tinit = time.clock()
     # get subgraphs
     if config.has_section('subgraph') and config.has_option('subgraph', 'preprocessing'):
       preprocessing = config.getboolean('subgraph', 'preprocessing')
@@ -90,13 +90,13 @@ class Reduce:
     #
     # self.logger.debug("Compare building subgraphs with and without preprocessing")
     # self.logger.debug("Get subgraphs with preprocessing...")
-    # tstart = time.time()
+    # tstart = time.clock()
     # sub_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=True)
-    # tprep = time.time() - tstart
+    # tprep = time.clock() - tstart
     # self.logger.debug("Get subgraphs without preprocessing...")
-    # tstart = time.time()
+    # tstart = time.clock()
     # sub_no_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=False)
-    # tnoprep = time.time() - tstart
+    # tnoprep = time.clock() - tstart
     #
     # # verify that they generate the same subgraphs
     # def node_match(n1, n2):
@@ -135,16 +135,16 @@ class Reduce:
     self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=preprocessing)
     self.num_races = len(self.subgraphs)
     self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
-    self.tsubgraph = time.time()
+    self.tsubgraph = time.clock()
 
   def run(self):
-    tstart = time.time()
+    tstart = time.clock()
     # Preprocessing
     if self.preprocessor:
       self.logger.info("Start preprocessing...")
       self.subgraphs = self.preprocessor.run(self.subgraphs)
       self.logger.info("Finished preprocessing")
-    tpreproc = time.time()
+    tpreproc = time.clock()
 
     ####################################################################################################################
     # Print preprocessed subgraphs
@@ -162,14 +162,14 @@ class Reduce:
     else:
       clusters = [[subg] for subg in self.subgraphs]
 
-    tcluster = time.time()
+    tcluster = time.clock()
 
     # Ranking
     self.logger.info("Start ranking...")
     self.rank.run(clusters)
     self.logger.info("Finished ranking")
 
-    trank = time.time()
+    trank = time.clock()
 
     # Export results
     self.rank.export_groups()
@@ -178,7 +178,7 @@ class Reduce:
     eval_dict = self.rank.eval
     eval_dict['num_races'] = self.num_races
     eval_dict['num_clusters'] = len(clusters)
-    eval_dict['t_total'] = time.time() - self.tstart
+    eval_dict['t_total'] = time.clock() - self.tstart
     eval_dict['t_init'] = self.tinit - self.tstart
     eval_dict['t_subg'] = self.tsubgraph - self.tinit
     eval_dict['t_prep'] = tpreproc - tstart
@@ -197,7 +197,7 @@ class Reduce:
 
     # summary timing
     self.logger.info("Timing Information Summary:")
-    self.logger.info("\tTotal time: %f s" % (time.time() - self.tstart))
+    self.logger.info("\tTotal time: %f s" % (time.clock() - self.tstart))
     self.logger.info("\tInitialization: %f s" % (self.tinit - self.tstart))
     self.logger.info("\tBuilding Subgraphs: %f s" % (self.tsubgraph - self.tinit))
     self.logger.info("\tPreprocessing: %f s" % (tpreproc - tstart))
