@@ -59,8 +59,8 @@ class Rank:
                score_contains_pingpong=1,
                score_single_send=1,
                score_return_path=1,
-               min_score=1,
-               threshold=1):
+               epsilon=1,
+               min_cluster_size=2):
     self.resultdir = resultdir
     self.max_groups = int(max_groups)
 
@@ -80,8 +80,10 @@ class Rank:
     # Maximum score
     self.max_score = sum(self.score_dict.values())
 
-    # Threshold for the clustering algorithm
-    self.threshold = float(threshold)
+    # DB Scan variables
+    self.epsilon = float(epsilon)
+    self.min_cluster_size = float(min_cluster_size)
+
     self.num_groups = 0
     self.groups = []
     self.remaining = []
@@ -111,8 +113,7 @@ class Rank:
     # Clustering
     tstart = time.clock()
     self.groups = self.cluster()
-    self.eval['time']['Clustering'] = time.clock() - tstart
-
+    self.eval['time']['Total Ranking'] = time.clock() - tstart
 
   def cluster(self):
     """ Clustering with DBScan"""
@@ -125,8 +126,6 @@ class Rank:
 
     # DBScan
     tstart = time.clock()
-    eps = 2           # eps-neighborhood: all points within distance eps around p
-    min_points = 5   # Minimum number of points in eps-neighborhood to be a core point
     visited = []
     outliers = []
     clusters = []
@@ -138,9 +137,9 @@ class Rank:
         continue
 
       visited.append(element)
-      neighbors = self.get_neighbors(element, eps, dist_mat)
+      neighbors = self.get_neighbors(element, self.epsilon, dist_mat)
       # If less then min_points in neighborhood -> outlier
-      if len(neighbors) < min_points:
+      if len(neighbors) < self.min_cluster_size:
         outliers.append(element)
         continue
 
@@ -159,8 +158,8 @@ class Rank:
         # If the neighbor was not visited, check the neighborhood, if its a core point -> add its neighbors
         if neighbor not in visited:
           visited.append(neighbor)
-          n_neighbors = self.get_neighbors(neighbor, eps, dist_mat)
-          if len(neighbors) >= min_points:
+          n_neighbors = self.get_neighbors(neighbor, self.epsilon, dist_mat)
+          if len(neighbors) >= self.min_cluster_size:
             neighbors.extend(n_neighbors)
 
       clusters.append(cluster)
@@ -258,8 +257,8 @@ class Rank:
     # Check if the sets are not empty
     if not len(group1.write_ids) > 0 or not len(group2.write_ids) > 0:
       # Should not happen, export graphs and raise error
-      nx.write_dot(group1.repre, os.path.join(self.resultdir, 'error_group1.dot'))
-      nx.write_dot(group2.repre, os.path.join(self.resultdir, 'error_group2.dot'))
+      nx.drawing.nx_agraph.write_dot(group1.repre, os.path.join(self.resultdir, 'error_group1.dot'))
+      nx.drawing.nx_agraph.write_dot(group2.repre, os.path.join(self.resultdir, 'error_group2.dot'))
       raise RuntimeError("One ore more groups contain no write ids! See exported graphs.")
 
     # Give score if they have at least one common element
@@ -288,13 +287,20 @@ class Rank:
     to export all informative graphs in the group."""
     for ind, group in enumerate(self.groups):
       # Export representative graph
-      nx.write_dot(group.repre, os.path.join(self.resultdir, 'repre_%03d.dot' % ind))
+      nx.drawing.nx_agraph.write_dot(group.repre, os.path.join(self.resultdir, 'repre_%03d.dot' % ind))
       # Create folder for the other graphs
       export_path = os.path.join(self.resultdir, 'group_%03d' % ind)
       if not os.path.exists(export_path):
         os.makedirs(export_path)
       for c_ind, cluster in enumerate(group.clusters):
-        nx.write_dot(cluster[0], os.path.join(export_path, 'iso_%03d.dot' % c_ind))
+        nx.drawing.nx_agraph.write_dot(cluster[0], os.path.join(export_path, 'iso_%03d.dot' % c_ind))
+
+    # Export outliers (remaining)
+    export_path = os.path.join(self.resultdir, 'rest')
+    if not os.path.exists(export_path):
+      os.makedirs(export_path)
+    for ind, cluster in enumerate(self.remaining):
+      nx.drawing.nx_agraph.write_dot(cluster[0], os.path.join(export_path, 'iso_%03d.dot' % ind))
 
   def print_timing(self):
     """ Logs the timing information."""

@@ -1,0 +1,162 @@
+import logging.config
+import time
+import os
+import sys
+import itertools
+import networkx as nx
+from networkx.algorithms import isomorphism
+
+import utils
+import cluster_algorithm
+import cluster
+
+logger = logging.getLogger(__name__)
+
+class Clustering:
+  def __init__(self, resultdir):
+    """
+    Class to cluster the subgraphs
+    """
+    self.resultdir = resultdir
+    self.graphs = []
+    self.clusters = []
+    self.remaining = []
+    self.eval = {'time': {},
+                 'info': {}}
+
+
+    self.t_is_is = 0
+    self.t_matcher = 0
+
+  def run(self, graphs, algorithm):
+    self.graphs = graphs
+
+    # Initialize clusters
+    tstart = time.clock()
+    logger.debug("Initialize clusters with isomorphic graphs")
+    self.initialize_clusters()
+
+    print "IsIso: " + self.t_is_is
+    print "Match: " + self.t_matcher
+
+    self.write_clusters_info()
+
+    # Clustering
+    logger.debug("Start Clustering")
+    self.clusters, self.remaining = algorithm.run(self.clusters)
+    self.write_clusters_info()
+
+    # Merge Eval dicts so that only this one is needed later
+    self.eval['score'] = algorithm.eval['score']
+    for k, v in algorithm.eval['time'].iteritems():
+      self.eval['time'][k] = v
+
+    self.eval['time']['Total'] = time.clock() - tstart
+
+    return
+
+  def initialize_clusters(self):
+    """
+    Initializes the clusters: Put all isomorphic graphs in a separate cluster.
+    """
+    tstart = time.clock()
+    logger.debug("Number of graphs: %d" % len(self.graphs))
+
+    ################################ nx.is_isomorphic ##################################
+    # Put all isomorphic graphs in groups
+    tstart = time.time()
+    stack = self.graphs[:]    # Copy of graph list to process
+    groups = []               # List groups of graphs which are later used to create the clusters
+
+    while stack:
+      curr_graph = stack.pop()
+      added = False
+      # Check if the current graph is isomorphic with a graph from a existing group of graphs
+      for group in groups:
+        if nx.is_isomorphic(curr_graph, group[0], node_match=utils.node_match, edge_match=utils.edge_match):
+          group.append(curr_graph)
+          added = True
+          break
+
+      # if not -> prepare new cluster
+      if not added:
+        groups.append([curr_graph])
+    groups_iso = groups[:]
+    self.t_is_is += time.clock() -tstart
+    ################################ nx.is_isomorphic ##################################
+    # Put all isomorphic graphs in groups
+    tstart = time.clock()
+    stack = self.graphs[:]  # Copy of graph list to process
+    groups = []  # List groups of graphs which are later used to create the clusters
+
+    while stack:
+      curr_graph = stack.pop()
+      added = False
+      # Check if the current graph is isomorphic with a graph from a existing group of graphs
+      for group in groups:
+        graph_matcher = isomorphism.DiGraphMatcher(group[0], curr_graph, node_match=node_match, edge_match=utils.edge_match)
+        if graph_matcher.is_isomorphic():
+          group.append(curr_graph)
+          added = True
+          break
+
+      # if not -> prepare new cluster
+      if not added:
+        groups.append([curr_graph])
+    self.t_matcher += time.clock() - tstart
+
+    assert groups_iso == groups, 'Groups not equal'
+    ###################end
+
+    # Create new cluster out of all groups and append it to the cluster list
+    for group in groups:
+      self.clusters.append(cluster.Cluster(group))
+
+    logger.debug("Number of clusters after iso: %d" % len(self.clusters))
+
+    self.eval['info']['Number of graphs'] = len(self.graphs)
+    self.eval['info']['Number of clusters after iso'] = len(self.clusters)
+
+    self.eval['time']['Initialize cluster'] = time.clock() - tstart
+    return
+
+  def write_clusters_info(self):
+    """
+    Writes the size of each cluster to the log (grouped by size).
+    """
+    logger.debug("Cluster Info")
+    logger.debug("\tTotal Clusters: %d, Total Subgraphs: %d" % (len(self.clusters), len(self.graphs)))
+
+    # sort the clusters based on size
+    self.clusters.sort(key=lambda x: len(x.graphs), reverse=True)
+    curr_size = sys.maxint
+    start_ind = 0
+    for ind, cluster in enumerate(self.clusters):
+      if len(cluster.graphs) < curr_size:
+        if not ind == 0:
+          logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, ind - 1, curr_size))
+        curr_size = len(cluster.graphs)
+        start_ind = ind
+
+    logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(self.clusters) - 1, curr_size))
+
+  def export_groups(self):
+    """ Exports the representative graphs in the result directory and creats a folder for each group
+    to export all informative graphs in the group."""
+    for ind, cluster in enumerate(self.clusters):
+      # Export representative graph
+      nx.drawing.nx_agraph.write_dot(cluster.representative, os.path.join(self.resultdir, 'cluster_%03d.dot' % ind))
+      # Create folder for the other graphs
+      export_path = os.path.join(self.resultdir, 'cluster_%03d' % ind)
+      if not os.path.exists(export_path):
+        os.makedirs(export_path)
+      for graph in cluster.graphs:
+        nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
+
+    # Export outliers (remaining)
+    export_path = os.path.join(self.resultdir, 'rest')
+    if not os.path.exists(export_path):
+      os.makedirs(export_path)
+    for cluster in self.remaining:
+      for graph in cluster.graphs:
+        nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))

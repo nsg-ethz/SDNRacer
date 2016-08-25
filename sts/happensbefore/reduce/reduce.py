@@ -8,16 +8,19 @@ import ConfigParser
 import logging.config
 import argparse
 import json
+import re
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
 import hb_graph
 
+
 class Reduce:
-  def __init__(self, hb_graph, trace_file):
-    self.tstart = time.clock()
+  def __init__(self, hb_graph, trace_file, thbgraph):
+    tstart = time.clock()
 
     print ""
-    print ""
+    print "########################################################################"
+    print "#############################  CLUSTERING  #############################"
     print "########################################################################"
     print ""
 
@@ -39,172 +42,115 @@ class Reduce:
 
     # Import modules, this has to be done after the logger configuration because of the dynamic logging file path
     import preprocessor
+    import clustering
     import cluster
     import subgraph
-    import rank
+    import cluster_algorithm
+
+    # Store copy of hb_graph and the harmful races
+    self.hb_graph = hb_graph.g.copy()
+    self.races = hb_graph.race_detector.races_harmful
 
     # Parse config
     config = ConfigParser.RawConfigParser()
     config.read(os.path.dirname(__file__) + '/config.ini')
 
-    # Prepare clustering
-    if not config.getboolean('general', 'no_cluster'):
-      if config.has_section('cluster'):
-        clusterargs = dict(config.items('cluster'))
-      else:
-        clusterargs = {}
+    # Initialize Class Preprocessor
+    c_args = dict(config.items('preprocessor'))
+    self.preprocessor = preprocessor.Preprocessor(self.hb_graph, self.races, **c_args)
 
-      self.cluster = cluster.Cluster(self.resultdir, **clusterargs)
-    else:
-      self.cluster = None
+    # Initialize Class Subgraph
+    c_args = dict(config.items('subgraph'))
+    self.subgraph = subgraph.Subgraph(self.hb_graph, self.races, self.resultdir, **c_args)
 
-    # Prepare preprocessor
-    if not config.getboolean('general', 'no_preprocess'):
-      if config.has_section('preprocessor'):
-        prepargs = dict(config.items('preprocessor'))
-      else:
-        prepargs = {}
+    # Initialize Class Clustering
+    c_args = dict(config.items('clustering'))
+    self.clustering = clustering.Clustering(self.resultdir, **c_args)
 
-      self.preprocessor = preprocessor.Preprocessor(**prepargs)
-    else:
-      self.preprocessor = None
+    # Initialize clustering algorithm
+    c_args = dict(config.items('cluster_algorithm'))
+    self.algorithm = cluster_algorithm.ClusterAlgorithm(self.resultdir, **c_args)
 
-    # prepare ranking
-    assert config.has_section('rank'), 'Missing configuration group "rank"'
-    rankargs = dict(config.items('rank'))
-
-    self.rank = rank.Rank(self.resultdir, **rankargs)
-
-    # graph data
-    self.hb_graph = hb_graph
-
-    self.tinit = time.clock()
-    # get subgraphs
-    if config.has_section('subgraph') and config.has_option('subgraph', 'preprocessing'):
-      preprocessing = config.getboolean('subgraph', 'preprocessing')
-    else:
-      preprocessing = False
-
-    ####################################################################################################################
-    # Compare generating subgraphs with and without preprocessing (for testing reasons only)
-    #
-    # self.logger.debug("Compare building subgraphs with and without preprocessing")
-    # self.logger.debug("Get subgraphs with preprocessing...")
-    # tstart = time.clock()
-    # sub_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=True)
-    # tprep = time.clock() - tstart
-    # self.logger.debug("Get subgraphs without preprocessing...")
-    # tstart = time.clock()
-    # sub_no_preprocessing = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=False)
-    # tnoprep = time.clock() - tstart
-    #
-    # # verify that they generate the same subgraphs
-    # def node_match(n1, n2):
-    #   # it returns True if two nodes are the same
-    #   return n1['label'] == n2['label']
-    #
-    # # first check if they have the same number of subgraphs
-    # assert len(sub_preprocessing) == len(sub_no_preprocessing), 'Different number of subgraphs found!'
-    #
-    # for ind, sub in enumerate(sub_preprocessing):
-    #   sub_equal = None
-    #   for i, sub_no in enumerate(sub_no_preprocessing):
-    #     # If the graphs are isomorphic...
-    #     if nx.is_isomorphic(sub, sub_no, node_match=node_match):
-    #       # and have the same nodes they are same
-    #       if set(sub.nodes()) == set(sub_no.nodes()):
-    #         # found same subgraph
-    #         sub_equal = sub_no
-    #         break
-    #
-    #   # assert sub_equal is not None, 'No equal graph found in sub_no_preprocessing'
-    #   if sub_equal:
-    #     sub_no_preprocessing.remove(sub_equal)
-    #
-    # assert len(sub_no_preprocessing) == 0, 'Sub_no_preprocessing not empty (Len: %s)' % len(sub_no_preprocessing)
-    #
-    # self.logger.debug("Building subgraphs with and without preprocessing lead to the same output :)")
-    # self.logger.debug("Time with preprocessing: %f" % tprep)
-    # self.logger.debug("Time without preprocessing: %f" % tnoprep)
-    #
-    # sys.exit(0)
-    # END Compare
-    ####################################################################################################################
-
-    # Generating subgraphs
-    self.subgraphs = subgraph.get_subgraphs(self.hb_graph, self.resultdir, preprocessing=preprocessing)
-    self.num_races = len(self.subgraphs)
-    self.logger.info("Number of subgraphs: %d" % len(self.subgraphs))
-    self.tsubgraph = time.clock()
+    # Eval dict
+    self.eval = {'info': {},
+                 'time': {}}
+    self.eval['time']['Init'] = time.clock() - tstart
+    self.eval['time']['hb_graph'] = thbgraph
+    return
 
   def run(self):
     tstart = time.clock()
     # Preprocessing
-    if self.preprocessor:
-      self.logger.info("Start preprocessing...")
-      self.subgraphs = self.preprocessor.run(self.subgraphs)
-      self.logger.info("Finished preprocessing")
-    tpreproc = time.clock()
+    self.logger.info("Preprocessing hb_graph")
+    self.preprocessor.run()
 
-    ####################################################################################################################
-    # Print preprocessed subgraphs
-    # for ind, g in enumerate(self.subgraphs):
-    #   export_path = os.path.join(self.resultdir, "subg_%03d_preprocessed.dot" % ind)
-    #   nx.write_dot(g, export_path)
-    #
-    ####################################################################################################################
+    self.logger.info("Building subgraphs")
+    # Building Subgraphs
+    graphs = self.subgraph.run()
 
     # Clustering
-    if self.cluster:
-      self.logger.info("Start clustering...")
-      clusters = self.cluster.run(self.subgraphs)
-      self.logger.info("Finished clustering")
-    else:
-      clusters = [[subg] for subg in self.subgraphs]
-
-    tcluster = time.clock()
+    self.logger.info("Cluster graphs")
+    self.clustering.run(graphs, self.algorithm)
 
     # Ranking
-    self.logger.info("Start ranking...")
-    self.rank.run(clusters)
-    self.logger.info("Finished ranking")
 
-    trank = time.clock()
+    # Store data for evaluation
+    self.eval['time']['run'] = time.clock() - tstart
+    self.eval['time']['total'] = self.eval['time']['hb_graph'] + self.eval['time']['Init'] + self.eval['time']['run']
+    self.eval['preprocessor'] = self.preprocessor.eval
+    self.eval['subgraph'] = self.subgraph.eval
+    self.eval['clustering'] = self.clustering.eval
 
-    # Export results
-    self.rank.export_groups()
+    self.eval['info']['Number of graphs'] = len(self.subgraph.subgraphs)
+    self.eval['info']['Number of clusters'] = len(self.clustering.clusters)
+    self.eval['info']['Remaining Graphs'] = len(self.clustering.remaining)
 
-    # Export data for evaluation
-    eval_dict = self.rank.eval
-    eval_dict['num_races'] = self.num_races
-    eval_dict['num_clusters'] = len(clusters)
-    eval_dict['t_total'] = time.clock() - self.tstart
-    eval_dict['t_init'] = self.tinit - self.tstart
-    eval_dict['t_subg'] = self.tsubgraph - self.tinit
-    eval_dict['t_prep'] = tpreproc - tstart
-    eval_dict['t_clust'] = tcluster - tpreproc
-    eval_dict['t_rank'] = trank - tcluster
+    for ind, cluster in enumerate(self.clustering.clusters):
+      self.eval['Cluster %d' % ind] = {}
+      self.eval['Cluster %d' % ind]['Number of graphs'] = len(cluster.graphs)
+      self.eval['Cluster %d' % ind]['Properties'] = cluster.properties
 
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
-      json.dump(eval_dict, outfile)
+      json.dump(self.eval, outfile)
+
+    # Export groups
+    self.clustering.export_groups()
 
     # summary
-    self.logger.info("Summary")
-    self.logger.info("Number of Races (subgraphs): %d" % self.num_races)
-    self.logger.info("Number of Clusters: %d" % len(clusters))
+    self.logger.info("SUMMARY:")
+    for k, v in self.eval['info'].iteritems():
+      self.logger.info("%30s - %5s" % (k, v))
 
-    self.rank.print_summary()
+    # Cluster summary
+    self.logger.info("Cluster Summary:")
+    for key in self.eval.keys():
+      if not re.match(r'Cluster \d*',key):
+        continue
+      self.logger.info("\t%s:" % key)
+      for k, v in self.eval[key].iteritems():
+        self.logger.info("%30s - %s" % (k, v))
 
     # summary timing
-    self.logger.info("Timing Information Summary:")
-    self.logger.info("\tTotal time: %f s" % (time.clock() - self.tstart))
-    self.logger.info("\tInitialization: %f s" % (self.tinit - self.tstart))
-    self.logger.info("\tBuilding Subgraphs: %f s" % (self.tsubgraph - self.tinit))
-    self.logger.info("\tPreprocessing: %f s" % (tpreproc - tstart))
-    self.logger.info("\tClustering: %f s" % (tcluster - tpreproc))
-    self.logger.info("\tRanking: %f s" % (trank - tcluster))
+    self.logger.info("Timing:")
+    for k, v in self.eval['time'].iteritems():
+      self.logger.info("%30s - %10.3f" % (k, v))
 
-    self.rank.print_timing()
+    # summary preprocessor
+    self.logger.debug("Timing preprocessor:")
+    for k, v in self.eval['preprocessor']['time'].iteritems():
+      self.logger.debug("%30s - %10.3f" % (k, v))
+
+    # summary subgraph
+    self.logger.debug("Timing subgraph:")
+    for k, v in self.eval['subgraph']['time'].iteritems():
+      self.logger.debug("%30s - %10.3f" % (k, v))
+
+    # summary clustering
+    self.logger.debug("Timing clustering:")
+    for k, v in self.eval['clustering']['time'].iteritems():
+      self.logger.debug("%30s - %10.3f" % (k, v))
+
+    return
 
 
 def auto_int(x):
@@ -259,7 +205,7 @@ if __name__ == '__main__':
       assert args.rw_delta == args.ww_delta
     else:
       args.rw_delta = args.ww_delta = args.delta
-
+  tstart = time.clock()
   m = hb_graph.Main(args.trace_file, print_pkt=args.print_pkt,
                     add_hb_time=not args.no_hbt, rw_delta=args.rw_delta, ww_delta=args.ww_delta,
                     filter_rw=args.filter_rw, ignore_ethertypes=args.ignore_ethertypes,
@@ -269,6 +215,6 @@ if __name__ == '__main__':
                     verify_and_minimize_only=args.verify_and_minimize_only,
                     is_minimized=args.is_minimized)
   m.run()
-
-  r = Reduce(m.graph, args.trace_file)
+  thbgraph = time.clock() - tstart
+  r = Reduce(m.graph, args.trace_file, thbgraph)
   r.run()

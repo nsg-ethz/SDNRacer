@@ -1,5 +1,6 @@
 import logging
 import time
+import itertools
 
 import networkx as nx
 
@@ -11,204 +12,55 @@ logger = logging.getLogger(__name__)
 
 class Preprocessor:
   # Provides different functions for preprocessing of the subgraphs
-  def __init__(self, extract_last_controller_action=True, substitute_patterns=True, remove_pid=True):
-    # set configuration options, all parameters must have default values!!
-    self.extract = extract_last_controller_action.lower() not in ['false', '0']
-    self.substitute = substitute_patterns.lower() not in ['false', '0']
-    self.remove_pid = remove_pid
+  def __init__(self, hb_graph, races, remove_nodes=True, remove_pid=True):
+    # set configuration options
+    self.remove_nodes = remove_nodes.lower() not in ['false', '0']
+    self.remove_pid = remove_pid.lower() not in ['false', '0']
+    self.hb_graph = hb_graph
+    self.races = races
+    self.eval = {'time': {}}
 
-  def run(self, subgraphs):
+  def run(self):
     """
     Runs preprocessing functions depending on the configuration of the preprocessor.
-
-    Args:
-      subgraphs:  list of subgraphs
-
-    Returns:      preprocessed list of subgraphs
-
     """
+    tstart = time.clock()
+
+    # Remove dispensable edges ('time' and 'dep_raw')
+    logger.debug('Remove dispensable edges')
+    self.remove_dispensable_edges()
+    self.eval['time']['Remove dispensable edges'] = time.clock() - tstart
+
+    # Remove unpersuasive nodes
+    if self.remove_nodes:
+      logger.debug('Remove unpersuasive nodes')
+      self.remove_dispensable_nodes()
+
     # Remove dispensable pid edges
     if self.remove_pid:
       logger.debug('Remove dispensable pid edges')
-      tstart = time.clock()
-      subgraphs = self.remove_dispensable_pid_edges(subgraphs)
-      logger.debug('\tTime: %f s' % (time.clock() - tstart))
+      self.remove_dispensable_pid_edges()
 
-    if self.substitute:
-      logger.debug('Detect and substitute patterns')
-      tstart = time.clock()
-      subgraphs = self.substitute_patterns(subgraphs)
-      logger.debug('\tTime: %f s' % (time.clock() - tstart))
+    self.eval['time']['Total'] = time.clock() - tstart
 
-    return subgraphs
+    return
 
-  def substitute_patterns(self, subgraphs):
+  def remove_dispensable_edges(self):
     """
-    Processes list of subgraphs and substitute all know patterns.
-
+    Removes all edges which where only added to filter harmfull races ('time' and 'dep_raw')
     Args:
-      subgraphs: list of subgraphs
+      graph: hb_graph
 
-    Returns
-      new list of preprocessed subgraphs
+    Returns: hb_graph with removed edges
     """
-    logger.info("Search for patterns...")
-    new_subgraphs = []
+    # Remove unnecessary edges
+    for src, dst, data in self.hb_graph.edges(data=True):
+      if data.get('rel', None) in ['time', 'dep_raw']:
+        self.hb_graph.remove_edge(src, dst)
 
-    for subg in subgraphs:
-      new_subgraphs.append(self._substitute(subg))
+    return
 
-    return new_subgraphs
-
-  def _substitute(self, graph):
-    """
-    Substitute known patterns in a graph. At the moment, this are ControllerHandes and DataplaneTraversals
-    Args:
-      graph:  graph
-
-    Returns:
-      graph with substituted patterns
-
-    """
-    # Put all root nodes on the stack
-    stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-    visited = []
-    while stack:
-      curr_node = stack.pop()
-      # Check if the node still exists in the graph
-      if curr_node not in graph.nodes():
-        continue
-
-      # Only visit each node once
-      if curr_node in visited:
-        continue
-      else:
-        visited.append(curr_node)
-
-      # Check for controller handle
-      if isinstance(graph.node[curr_node]['event'], hb_events.HbControllerHandle):
-        # found a controller handle, check if the previous event is a MessageSend and the successors are ControllerSend
-        pre = graph.predecessors(curr_node)
-        suc = graph.successors(curr_node)
-
-        # First check the cases which should not exist and raise error if they do
-        if not (len(pre) == 1 and isinstance(graph.node[pre[0]]['event'], hb_events.HbMessageSend)):
-          raise RuntimeError("ControllerHandle %d has != 1 predecessor or predecessor is not MessageSend" % curr_node)
-
-        for s in suc:
-          if not isinstance(graph.node[s]['event'], hb_events.HbControllerSend):
-            raise RuntimeError("Controllerhandle %d predecessor %d is not ControllerSend" % (curr_node, s))
-
-        # Substitute ControllerHandle
-        # First redirect outgoing edges to the first node of the ControllerHandle
-        for s in suc:
-          for n in graph.successors(s):
-            graph.add_edge(pre[0], n, graph.edge[s][n])
-            # add them to the stack
-            stack.append(n)
-
-        # Now Modify the information in the first node
-        graph.node[pre[0]]['event'] = 'ControllerHandle'
-        graph.node[pre[0]]['event_ids'] = pre + [curr_node] + suc
-        label = 'ControllerHandle \\n'
-        old_label = graph.node[pre[0]]['label']
-        old_label = old_label.split("\\n")
-        for s in old_label:
-          s = s.strip()
-          if "DPID" in s or "MsgType" in s or "XID" in s:
-            label = label + s + "\\n"
-        graph.node[pre[0]]['label'] = label
-        graph.node[pre[0]]['color'] = 'green'
-
-        # Remove the nodes
-        graph.remove_node(curr_node)
-        graph.remove_nodes_from(suc)
-
-      # Check for dataplane traversal
-      elif isinstance(graph.node[curr_node]['event'], (hb_events.HbPacketHandle, hb_events.HbHostHandle)):
-        n = [curr_node]
-        s = graph.successors(curr_node)
-        ids = []
-        label = 'DataplaneTraversal \\n'
-
-        while True:
-          if (len(s) == 1 and
-              isinstance(graph.node[n[0]]['event'], hb_events.HbPacketHandle) and
-              isinstance(graph.node[s[0]]['event'], hb_events.HbPacketSend)):
-            # Found switch traversal in this case
-            ids.append(n[0])
-            ids.append(s[0])
-
-            label += 'DPID: %d \\n' % graph.node[n[0]]['event'].dpid
-
-          elif (len(s) == 1 and
-                isinstance(graph.node[n[0]]['event'], hb_events.HbHostHandle) and
-                isinstance(graph.node[s[0]]['event'], hb_events.HbHostSend)):
-            # Found host traversal in this case
-            ids.append(n[0])
-            ids.append(s[0])
-
-            label += 'HID: %d \\n' % graph.node[n[0]]['event'].hid
-
-          else:
-            break
-
-          # Only continue if s has only one successor
-          if len(graph.successors(s[0])) == 1:
-            n = graph.successors(s[0])
-            s = graph.successors(n[0])
-          else:
-            break
-
-        # If we found ids -> Substitute
-        if ids:
-          # Redirect edges
-          for s in graph.successors(ids[-1]):
-            graph.add_edge(ids[0], s, graph.edge[ids[-1]][s])
-
-          # Modify first node to hold all needed information
-          graph.node[ids[0]]['event'] = 'DataplaneTraversal'
-          graph.node[ids[0]]['event_ids'] = ids
-          graph.node[ids[0]]['label'] = label
-          graph.node[ids[0]]['color'] = 'green'
-
-          # remove all other nodes
-          graph.remove_nodes_from(ids[1:])
-
-          # Add successors for further processing
-          stack.extend(graph.successors(curr_node))
-
-        else:
-          # No dataplanetraversal found -> continue with successors
-          stack.extend(graph.successors(curr_node))
-
-      # Other event types are not part of a pattern -> continue with successors
-      else:
-        # continue with the successors
-        stack.extend(graph.successors(curr_node))
-
-    return graph
-
-  def remove_dispensable_pid_edges(self, subgraphs):
-    """
-    Processes list of subgraphs and substitute all know patterns.
-
-    Args:
-      subgraphs: list of subgraphs
-
-    Returns
-      new list of preprocessed subgraphs
-    """
-    logger.info("Remove dispensable pid edges...")
-    new_subgraphs = []
-
-    for ind, subg in enumerate(subgraphs):
-      logger.debug("\t Subgraph %d" % ind)
-      new_subgraphs.append(self._remove_dispensable_pid_edges(subg))
-
-    return new_subgraphs
-
-  def _remove_dispensable_pid_edges(self, graph):
+  def remove_dispensable_pid_edges(self):
     """
     Removes pid edges between two events if there is another patch via the controller.
     Args:
@@ -217,8 +69,9 @@ class Preprocessor:
     Returns:
       graph without the pid edges
     """
+    tstart = time.clock()
     # get all root nodes
-    stack = [x for x in graph.nodes() if not graph.predecessors(x)]
+    stack = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
     visited = []
 
     while stack:
@@ -228,46 +81,87 @@ class Preprocessor:
       else:
         visited.append(curr_node)
 
-      # Check if there are not exactly two successors -> continue with successors
-      suc = graph.successors(curr_node)
-      if not len(suc) == 2:
+      # Check if there are less than two successors -> continue with successors
+      suc = self.hb_graph.successors(curr_node)
+      if len(suc) > 2:
         stack.extend(suc)
         continue
 
       else:
-        # Check if one edge is 'mid' and the other 'pid'
-        if (graph.edge[curr_node][suc[0]]['rel'] == 'mid' and
-            graph.edge[curr_node][suc[1]]['rel'] == 'pid'):
-          mid_node = suc[0]
-          pid_node = suc[1]
+        # for each combination of the edges
+        mid_node = None
+        pid_node = None
+        processed = []
+        for suc1, suc2 in itertools.combinations(suc, 2):
+          # Check if one edge is 'mid' and the other 'pid'
+          if (self.hb_graph.edge[curr_node][suc1]['rel'] == 'mid' and
+              self.hb_graph.edge[curr_node][suc2]['rel'] == 'pid'):
+            mid_node = suc[0]
+            pid_node = suc[1]
 
-        elif (graph.edge[curr_node][suc[0]]['rel'] == 'pid' and
-              graph.edge[curr_node][suc[1]]['rel'] == 'mid'):
-          mid_node = suc[1]
-          pid_node = suc[0]
+          elif (self.hb_graph.edge[curr_node][suc[0]]['rel'] == 'pid' and
+                self.hb_graph.edge[curr_node][suc[1]]['rel'] == 'mid'):
+            mid_node = suc[1]
+            pid_node = suc[0]
 
-        else:
-          # not dispensable edge -> continue with the next nodes
-          stack.extend(suc)
-          continue
+          if not mid_node or not pid_node:
+            # not dispensable edges -> continue with the next nodes
+            continue
 
-        # Check if the longer path is MessageSend -> ControllerHandle -> ControllerSend and to node after is the node
-        # where the pid edge ends
-        if isinstance(graph.node[mid_node]['event'], hb_events.HbMessageSend):
-          suc = graph.successors(mid_node)
-          if len(suc) == 1 and isinstance(graph.node[suc[0]]['event'], hb_events.HbControllerHandle):
-            # It's possible that a controllerhandle causes multiple controller sends -> check all of them
-            suc = graph.successors(suc[0])
-            for n in suc:
-              if isinstance(graph.node[n]['event'], hb_events.HbControllerSend):
-                n = graph.successors(n)
-                if len(n) == 1 and n[0] == pid_node:
-                  # In this case, the pid-edge is dispensable
-                  graph.remove_edge(curr_node, pid_node)
-                  stack.append(pid_node)
-                  continue
+          # Check if the longer path is MessageSend -> ControllerHandle -> ControllerSend and to node after is the node
+          # where the pid edge ends
+          if isinstance(self.hb_graph.node[mid_node]['event'], hb_events.HbMessageSend):
+            mid_suc = self.hb_graph.successors(mid_node)
+            if len(mid_suc) == 1 and isinstance(self.hb_graph.node[mid_suc[0]]['event'], hb_events.HbControllerHandle):
+              # It's possible that a controllerhandle causes multiple controller sends -> check all of them
+              mid_suc = self.hb_graph.successors(mid_suc[0])
+              for n in mid_suc:
+                if isinstance(self.hb_graph.node[n]['event'], hb_events.HbControllerSend):
+                  n = self.hb_graph.successors(n)
+                  if len(n) == 1 and n[0] == pid_node:
+                    # In this case, the pid-edge is dispensable
+                    self.hb_graph.remove_edge(curr_node, pid_node)
+                    stack.append(pid_node)
+                    # pid already added to stack
+                    processed.append(pid_node)
 
-        # In any of the other cases -> continue with successors
-        stack.extend(graph.successors(curr_node))
+        # Add not processed nodes to stack
+        stack.extend([x for x in suc if not x in processed])
 
-    return graph
+    self.eval['time']['Remove unpersuasive nodes'] = time.clock() - tstart
+    return
+
+  def remove_dispensable_nodes(self):
+    """
+    Removes all events that happen after (are below) a race event.
+    """
+    # Generate list with all race ids
+    race_ids = [x for race in self.races for x in (race.i_event.eid, race.k_event.eid)]
+
+    tstart = time.clock()
+    logger.debug("Total nodes before removal: %d" % self.hb_graph.number_of_nodes())
+
+    nodes_removed = 1
+    tot_nodes_removed = 0
+    while nodes_removed > 0:
+      nodes_removed = 0
+      # Get leave nodes
+      leaf_nodes = [x for x in self.hb_graph.nodes_iter() if not self.hb_graph.successors(x)]
+      for leaf in leaf_nodes:
+        # If a leaf node is not part of a race, add it for removal
+        if leaf not in race_ids:
+          self.hb_graph.remove_node(leaf)
+          nodes_removed += 1
+
+      tot_nodes_removed += nodes_removed
+
+    # Check that still all races are in the graph
+    for race in race_ids:
+      assert self.hb_graph.has_node(race), "Race event with id %s not in graph" % race
+
+    logger.debug("Total nodes after removal: %d" % self.hb_graph.number_of_nodes())
+
+    self.eval['time']['Remove pid edges'] = time.clock() - tstart
+    return
+
+

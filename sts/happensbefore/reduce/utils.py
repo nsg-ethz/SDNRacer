@@ -1,6 +1,9 @@
 
+import sys
+import time
 import logging
 import networkx as nx
+from networkx.algorithms import isomorphism
 
 import hb_events
 import hb_sts_events
@@ -8,6 +11,7 @@ import hb_sts_events
 
 # create logger
 logger = logging.getLogger(__name__)
+
 
 def has_write_event(graph):
   """
@@ -65,200 +69,38 @@ def remove_dataplanetraversals(g):
   return graph if found_dataplanetraversal else None
 
 
-def substitute_pingpong(g):
-  """
-  Checks if the graph contains a controller-switch-pingpong and substitute it with a single node.
-  Returns:
-    graph with substituted nodes
-  """
-  # First copy graph
-  graph = g.copy()
-
-  # Now check for controller-switch-pingpong
-  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-  found_pingpong = False
-  visited = []
-
-  while stack:
-    curr_node = stack.pop()
-    if curr_node in visited:
-      continue
-    else:
-      visited.append(curr_node)
-
-    if graph.node[curr_node]['event'] == 'ControllerHandle':
-      # Found first controllerhandle -> No get dpid of switch
-      pre = graph.predecessors(curr_node)
-      suc = graph.successors(curr_node)
-      dpid = graph.node[pre[0]]['event'].dpid
-
-      if len(pre) != 1 or len(suc) != 1:
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Check if the next node is a MessageHandle with the same dpid
-      if not (isinstance(graph.node[suc[0]]['event'], hb_events.HbMessageHandle) or
-                  graph.node[suc[0]]['event'].dpid == dpid):
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Check if the event after is again a controllerhandle
-      node = graph.successors(suc[0])
-      if not len(node) == 1 or not graph.node[node[0]]['event'] == 'ControllerHandle':
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Found Controller-Switch-PingPong
-      found_pingpong = True
-      # find all nodes which are part of it
-      ids = [curr_node, suc[0], node[0]]  # NodeIds which are part of the pingpong
-      num = 2
-      node = graph.successors(node[0])
-      if len(node) == 1:
-        suc = graph.successors(node[0])
-
-        while len(suc) == 1 and len(node) == 1:
-          # Check if there is another pingpong
-          if (isinstance(graph.node[node[0]]['event'], hb_events.HbMessageHandle) and
-                  graph.node[node[0]]['event'].dpid == dpid and
-                  graph.node[suc[0]]['event'] == 'ControllerHandle'):
-            # Found another pingpong -> add ids
-            num += 1
-            ids.append(node[0])
-            ids.append(suc[0])
-            node = graph.successors(node[0])
-            if len(node) != 1:
-              break
-            else:
-              suc = graph.successors(node[0])
-
-          else:
-            break
-
-      # Substitute nodes
-      for n in graph.successors(ids[-1]):
-        graph.add_edge(ids[0], n, graph.edge[ids[-1]][n])
-        # add them to the stack
-        stack.append(n)
-
-      # Now Modify the information in the first node
-      graph.node[ids[0]]['event'] = 'PingPong'
-      graph.node[ids[0]]['event_ids'] = []  # Not relevant since this is only a copy
-      graph.node[ids[0]]['label'] = 'PingPong \\n DPID: %d \\n Num: %d' % (dpid, num)
-      graph.node[ids[0]]['color'] = 'green'
-
-      # Remove the nodes
-      graph.remove_nodes_from(ids[1:])
-
-    else:
-      stack.extend(graph.successors(curr_node))
-
-  return graph if found_pingpong else None
-
-
 def contains_pingpong(graph):
   """
-  Returns True if graph contains a controller-switch-pingpong of False if not
+  Takes a graph g and substitute all controller handles (messagesend -> controllerhandle -> controllersend) with
+  a single "controllerhandle" node.
   """
-  # Now check for controller-switch-pingpong
-  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-  visited = []
+  tstart = time.clock()
+  # Create dummy controller handle for graph subgraph isomorphism check.
+  controller_dummy = nx.DiGraph()
+  controller_dummy.add_node(1, {'event': hb_events.HbMessageSend(None, None, None)})
+  controller_dummy.add_node(2, {'event': hb_events.HbControllerHandle(None, None)})
+  controller_dummy.add_node(3, {'event': hb_events.HbControllerSend(None, None)})
+  controller_dummy.add_node(4, {'event': hb_events.HbMessageHandle(None, None)})
+  controller_dummy.add_node(5, {'event': hb_events.HbMessageSend(None, None, None)})
+  controller_dummy.add_node(6, {'event': hb_events.HbControllerHandle(None, None)})
+  controller_dummy.add_node(7, {'event': hb_events.HbControllerSend(None, None)})
+  controller_dummy.add_edge(1, 2)
+  controller_dummy.add_edge(2, 3)
+  controller_dummy.add_edge(3, 4)
+  controller_dummy.add_edge(4, 5)
+  controller_dummy.add_edge(5, 6)
+  controller_dummy.add_edge(6, 7)
 
-  while stack:
-    curr_node = stack.pop()
-    if curr_node in visited:
-      continue
-    else:
-      visited.append(curr_node)
-
-    if graph.node[curr_node]['event'] == 'ControllerHandle':
-      # Found first controllerhandle -> No get dpid of switch
-      pre = graph.predecessors(curr_node)
-      suc = graph.successors(curr_node)
-      dpid = graph.node[pre[0]]['event'].dpid
-
-      if len(pre) != 1 or len(suc) != 1:
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Check if the next node is a MessageHandle with the same dpid
-      if not (isinstance(graph.node[suc[0]]['event'], hb_events.HbMessageHandle) or
-              graph.node[suc[0]]['event'].dpid == dpid):
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Check if the event after is again a controllerhandle
-      node = graph.successors(suc[0])
-      if not len(node) == 1 or not graph.node[node[0]]['event'] == 'ControllerHandle':
-        # Not PingPong -> continue with successors
-        stack.extend(suc)
-        continue
-
-      # Found Controller-Switch-PingPong
+  # Check if this pattern is in the graph
+  graph_matcher = isomorphism.DiGraphMatcher(graph, controller_dummy, node_match=node_match)
+  for match in graph_matcher.subgraph_isomorphisms_iter():
+    # Check if the message origins from the same switch
+    e1 = (key for key, value in match.items() if value == 1).next()
+    e2 = (key for key, value in match.items() if value == 5).next()
+    if graph.node[e1]['event'].dpid == graph.node[e2]['event'].dpid:
       return True
 
-    else:
-      stack.extend(graph.successors(curr_node))
-
   return False
-
-
-def is_caused_by_single_send(graph):
-  """
-  Returns if the race is caused by a single send (e.g. one host send).
-  """
-  if (len([x for x in graph.nodes() if not graph.predecessors(x)]) == 1 and
-          len([x for x in graph.nodes() if not graph.successors(x)]) == 2):
-    return True
-  else:
-    return False
-
-
-def has_return_path(graph):
-  """
-  Return True if the graph contains a HostHandle followed by a HostSend (contains a return path of the packet).
-  """
-  # Traverse graph
-  stack = [x for x in graph.nodes() if not graph.predecessors(x)]
-  visited = []
-  while stack:
-    node = stack.pop()
-    if node in visited:
-      continue
-    else:
-      visited.append((node))
-    stack.extend(graph.successors(node))
-    # Check both cases: either a substituted DataplaneTraversal or the original HostHandle event
-    if graph.node[node]['event'] == 'DataplaneTraversal':
-      # Check if the dataplane traversals contains a HostId
-      if 'HID' in graph.node[node]['label']:
-        return True
-
-    elif isinstance(graph.node[node]['event'], hb_events.HbHostHandle):
-      # Check if is it followed by a single host send
-      suc = graph.successors(node)
-      if len(suc) == 1 and isinstance(graph.node[suc[0]]['event'], hb_events.HbHostSend):
-        return True
-
-  return False
-
-
-def get_write_events(cluster):
-  """ Returns a set consisting of all write events in a cluster."""
-  # Get the event ids of all write events in the group
-  write_ids = []
-  for graph in cluster:
-    # get leaf nodes
-    for node in (x for x in graph.nodes() if not graph.successors(x)):
-      if is_write_event(node, graph):
-        write_ids.append(node)
-
-  return set(write_ids)
 
 
 def iso_components(graph1, graph2):
@@ -266,7 +108,7 @@ def iso_components(graph1, graph2):
   Return True if any components of the graph are isomorphic.
   """
   # Split graph1
-  components = nx.weakly_connected_components(graph1)
+  components = list(nx.weakly_connected_components(graph1))
 
   if len(components) == 2:
     # Only interesting if the graph has two separate branches
@@ -283,7 +125,7 @@ def iso_components(graph1, graph2):
     g2 = None
 
   # Split split graph 2
-  components = nx.weakly_connected_components(graph2)  # Only consider first graph of the cluster
+  components = list(nx.weakly_connected_components(graph2))  # Only consider first graph of the cluster
 
   if len(components) == 2:
     # Only interesting if the graph has two separate branches

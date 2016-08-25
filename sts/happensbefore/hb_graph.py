@@ -8,6 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../../pox"))
 import argparse
 from collections import defaultdict
 import networkx as nx
+from networkx.drawing.nx_agraph import write_dot
 
 from pox.lib.packet.ethernet import ethernet
 from pox.openflow.libopenflow_01 import ofp_flow_mod_command_rev_map
@@ -599,7 +600,7 @@ class HappensBeforeGraph(object):
       filename = os.path.join(self.results_dir,filename)
 
     self.prep_draw(self.g, print_packets)
-    nx.write_dot(self.g, os.path.join(self.results_dir, filename))
+    write_dot(self.g, os.path.join(self.results_dir, filename))
 
   @staticmethod
   def prep_draw(g, print_packets, allow_none_event=False):
@@ -714,7 +715,7 @@ class HappensBeforeGraph(object):
       subg = subgraphs[i]
       send = subg.graph['host_send']
       HappensBeforeGraph.prep_draw(subg, print_packets)
-      nx.write_dot(subg, "%s/trace_%s_%s_%04d.dot" % (results_dir,
+      write_dot(subg, "%s/trace_%s_%s_%04d.dot" % (results_dir,
                                                       str(send.packet.src),
                                                       str(send.packet.dst), send.eid))
 
@@ -816,7 +817,7 @@ class HappensBeforeGraph(object):
     name = "%s_%s_%s_%s.dot" %(label, src, dst, host_send.eid)
     name = os.path.join(self.results_dir, name)
     print "Storing packet %s for %s->%s in %s " % (label, src, dst, name)
-    nx.write_dot(g, name)
+    write_dot(g, name)
 
   def races_graph(self):
     races = self.race_detector.races_harmful
@@ -833,7 +834,7 @@ class HappensBeforeGraph(object):
     graph = self.races_graph()
     self.prep_draw(graph, print_pkts)
     print "Saving all races graph in", name
-    nx.write_dot(graph, os.path.join(self.results_dir, name))
+    write_dot(graph, os.path.join(self.results_dir, name))
 
   def find_covered_races(self):
     """
@@ -1295,7 +1296,7 @@ class HappensBeforeGraph(object):
     for i, k in race_edges:
       subg.add_edge(k, i, rel='covered')
     self.prep_draw(subg, True)
-    nx.write_dot(subg, os.path.join(self.results_dir, 'covered_races.dot'))
+    write_dot(subg, os.path.join(self.results_dir, 'covered_races.dot'))
 
   def racing_versions_graph(self, v1, cmd1, v2, cmd2):
     nodes = []
@@ -1497,7 +1498,7 @@ class Main(object):
           rvg = self.graph.racing_versions_graph(v1, racing_versions_tuples_dict[(v1, v2)][0], v2, racing_versions_tuples_dict[(v1, v2)][1])
           rvg_path = os.path.join(self.results_dir, 'isolation_violation_%d.dot' % counter)
           print "Saving update isolation violation graph to %s" % rvg_path
-          nx.write_dot(rvg, rvg_path)
+          write_dot(rvg, rvg_path)
         if hasattr(v1, 'eid'):
           pv1 = "React to event %s, %s" %  (v1.eid , getattr(v1, 'msg_type_str', ''))
         else:

@@ -1,212 +1,113 @@
 
 
 import os
+import sys
 import time
 import logging
 import networkx as nx
+
+import utils
+import hb_events
 
 # create logger
 logger = logging.getLogger(__name__)
 
 
-def get_subgraphs(hb_graph, resultdir, preprocessing=True):
-  """
-  Removes unnecessary edge of the graph (based on time) and get a subgraph for each race.
-  Each subgraph contains all the nodes starting from a HostSend event to an event that was part of a race.
+class Subgraph:
+  def __init__(self, hb_graph, races, resultdir):
+    self.resultdir = os.path.join(resultdir, 'subgraphs')
+    if not os.path.exists(self.resultdir):
+      os.makedirs(self.resultdir)
 
-  Args:
-    hb_graph: hb graph
-    resultdir: path to the result directory
-    preprocessing: enable or disable preprocessing (default True)
+    self.hb_graph = hb_graph
+    self.races = races
+    self.subgraphs = []
+    self.eval = {'time': {}}
 
-  Returns: List of subgraphs
-  """
-  logger.debug("Get_subgraphs...")
-  tstart = time.clock()
+  def run(self):
+    tstart = time.clock()
+    logger.debug("Generate subgraphs")
+    self.generate_subgraphs()
 
-  # Use a copy of the graph
-  cg = hb_graph.g.copy()
+    logger.debug("Set subgraph attributes")
+    self.set_attributes()
 
-  # Remove unnecessary edges
-  for src, dst, data in cg.edges(data=True):
-    if data.get('rel', None) in ['time', 'dep_raw']:
-      cg.remove_edge(src, dst)
+    self.eval['time']['Total'] = time.clock() - tstart
 
-  # First start getting the simple paths between all host_sends and
-  # the reachable race events
-  harmful = hb_graph.race_detector.races_harmful
+    return self.subgraphs
 
-  # Generate list with all race ids, prepare dictionary for all paths to a race event
-  all_paths = {}
-  race_ids = []
-  for race in harmful:
-    i = race.i_event.eid
-    k = race.k_event.eid
-    race_ids.append(i)
-    race_ids.append(k)
-    if i not in all_paths:
-      all_paths[i] = []
-    if k not in all_paths:
-      all_paths[k] = []
+  def generate_subgraphs(self):
+    """
+    Generate all subgraphs from self.races and self.hb_graph.
+    """
+    tstart = time.clock()
+    # Loop through all races
+    for ind, race in enumerate(self.races):
+      logger.debug("Get Subgraph for race %d" % ind)
+      stack = [race.i_event.eid, race.k_event.eid]
+      nodes = []
 
-  # convert to set for faster lookup
-  race_ids = set(race_ids)
+      # Get all nodes in this subgraph
+      while stack:
+        curr_node = stack.pop()
+        if curr_node in nodes:
+          continue
+        else:
+          stack.extend(self.hb_graph.predecessors(curr_node))
+          nodes.append(curr_node)
 
-  tprepare = time.clock() - tstart
-  tstart = time.clock()
+      # Generate subgraph
+      subg = nx.DiGraph(self.hb_graph.subgraph(nodes), race=race, index=ind)
+      subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
+      subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
 
-  # preprocess graph
-  if preprocessing:
-    # remove all dispensable nodes
-    remove_dispensable_nodes(cg, race_ids)
+      nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
+      # Verify that the only leaf-nodes are the race events
+      leaves = [x for x in subg.nodes() if not subg.successors(x)]
+      assert len(leaves) == 2, 'Building subgraphs: Not exactly two leaf-nodes (%d)' % len(leaves)
+      assert race.i_event.eid in leaves, 'Building subgraphs: i-event not in leaves (leaves: %s)' % leaves
+      assert race.k_event.eid in leaves, 'Building subgraphs: k-event not in leaves (leaves: %s)' % leaves
 
-  tpreprocess = time.clock() - tstart
-  tstart = time.clock()
+      self.subgraphs.append(subg)
 
-  # find paths
-  for ind, send in enumerate(hb_graph.host_sends):
-    # check if the host_send event is still in the graph after preprocessing
-    if cg.has_node(send):
-      paths_to_race = get_path_to_race(cg, send, race_ids)
-      for paths in paths_to_race:
-        # last element is the race event id
-        all_paths[paths[-1]].append(paths)
-
-  tfindpaths = time.clock() - tstart
-  tstart = time.clock()
-
-  # Now construct the subgraphs
-  subgraphs = []
-  for ind, race in enumerate(harmful):
-    i = race.i_event.eid
-    k = race.k_event.eid
-    nodes = [i, k]
-    for path in all_paths[i]:
-      nodes.extend(path)
-    for path in all_paths[k]:
-      nodes.extend(path)
-
-    nodes = list(set(nodes))
-
-    subg = nx.DiGraph(cg.subgraph(nodes), race=race, index=ind)
-    assert subg.graph['race'].i_event.eid in subg.nodes(), "x doesn't have i"
-    assert subg.graph['race'].k_event.eid in subg.nodes(), "x doesn't have k"
-    subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
-    subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
-
-    subgraphs.append(subg)
-    # subg.add_edge(i, k, rel='race', harmful=True)
-    # subg.edge[i][k]['color'] = 'red'
-    # subg.edge[i][k]['style'] = 'bold'
-
-    # Export subgraphs
-    # export_path = os.path.join(resultdir, "subg_%03d.dot" % ind)
-    # nx.write_dot(subg, export_path)
-
-  tconstuct = time.clock() - tstart
-
-  # Uncomment to export a graph containing all subgraphs (slow!)
-  # export_path = os.path.join(resultdir, "subg_all.dot")
-  # nx.write_dot(nx.disjoint_union_all(subgraphs), export_path)
-
-  logger.debug("Timing Subgraphs: ")
-  logger.debug("Time prepare: %f" % tprepare)
-  logger.debug("Time preprocess: %f" % tpreprocess)
-  logger.debug("Time finding paths: %f" % tfindpaths)
-  logger.debug("Time constructin subgraphs: %f" % tconstuct)
-
-  return subgraphs
-
-
-def get_path_to_race(graph, host_send, race_ids):
-  """
-  Traverses the graph starting from host_send. Return paths from host_send to all reachable race events.
-  Args:
-    graph:      graph
-    host_send:  host send event id
-    races:      list of all race events
-
-  Returns: path to all reachable race events
-  """
-  path = []             # Path to the current node
-  visited = []          # List of all visited nodes
-  paths_to_race = []    # All paths leading to a race event (list of paths)
-  alt_paths = []        # List of alternative paths to a node
-  _get_path_to_race(graph, host_send, race_ids, path, paths_to_race, visited, alt_paths)
-
-  # check if we have alternative paths which lead to a race
-  # Construct all pathes to the race event with the alternative pathes until no new ones are found.
-  old_len = 0
-  while len(paths_to_race) > old_len:
-    old_len = len(paths_to_race)
-    for path in paths_to_race[:]:
-      for alt in alt_paths[:]:
-        if alt[-1] in path:
-          node_index = path.index(alt[-1])
-          if len(path) > node_index + 1:
-            paths_to_race.append(alt + path[(node_index + 1):])
-            alt_paths.remove(alt)
-
-  return paths_to_race
-
-
-def _get_path_to_race(graph, node, race_ids, path, paths_to_race, visited, alt_paths):
-  """
-  Recursive part of get_path_to_race.
-  """
-  path.append(node)
-
-  # If node is already in path we can return, happens when there are multiple paths to a node
-  if node in visited:
-    # logger.debug("Node %d already visited." % node)
-    alt_paths.append(path)
+    self.eval['time']['Generate subgraphs'] = time.clock() - tstart
     return
 
-  else:
-    visited.append(node)
+  def set_attributes(self):
+    """
+    Sets subgraph attributes which are later used for the clustering/ranking.
+    """
+    tstart = time.clock()
+    for g in self.subgraphs:
+      # Nodes (Original list of node ids to reconstruct it later if necessary)
+      g.graph['nodes'] = g.nodes()
 
-  # get children of node
-  for child in graph.neighbors(node):
-    _get_path_to_race(graph, child, race_ids, path[:], paths_to_race, visited, alt_paths)
+      # Roots (use to determine from how much send events this race origins)
+      roots = [x for x in g.nodes() if not g.predecessors(x)]
+      g.graph['roots'] = roots
 
-  if node in race_ids:
-    paths_to_race.append(path)
+      # HostHandles (check if there are hosthandles in the graph -> return path affected)
+      hosthandles = [x for x in g.nodes() if isinstance(g.node[x]['event'], hb_events.HbHostHandle)]
+      g.graph['hosthandles'] = hosthandles
 
-  return
+      # Write events (list of all race-write-events in the graph)
+      write_events = []
+      i_event = g.graph['race'].i_event.eid
+      k_event = g.graph['race'].k_event.eid
+      if utils.is_write_event(i_event, g):
+        write_events.append(i_event)
+      if utils.is_write_event(k_event, g):
+        write_events.append(k_event)
 
+      assert len(write_events) > 0, 'No write-race-events in subgraph %d' % g.graph['index']
+      g.graph['write_ids'] = write_events
 
-def remove_dispensable_nodes(hb_graph, race_ids):
-  """
-  Removes all events that happen after (are below) a race event.
-  Args:
-    hb_graph: networkx bigraph
-    race_ids: List of all race events
-  """
-  logger.debug("Remove_dispensable nodes...")
-  logger.debug("Total nodes before removal: %d" % hb_graph.number_of_nodes())
+      # Controller-Switch-Pingpong (Indicates if graph contains controller switch pingpong)
+      g.graph['pingpong'] = utils.contains_pingpong(g)
 
-  tstart = time.clock()
-  nodes_removed = 1
-  tot_nodes_removed = 0
-  while nodes_removed > 0:
-    nodes_removed = 0
-    # Get leave nodes
-    leaf_nodes = [x for x in hb_graph.nodes_iter() if not hb_graph.successors(x)]
-    for leaf in leaf_nodes:
-      # If a leaf node is not part of a race, add it for removal
-      if leaf not in race_ids:
-        hb_graph.remove_node(leaf)
-        nodes_removed += 1
+    self.eval['time']['Get subgraph attributes'] = time.clock() - tstart
 
-    tot_nodes_removed += nodes_removed
+    return
 
-  # Check that still all races are in the graph
-  for race in race_ids:
-    assert hb_graph.has_node(race), "Race event with id %s not in graph" % race
-
-  logger.debug("Removed %s nodes in %f seconds" % (tot_nodes_removed, time.clock() - tstart))
-  logger.debug("Total nodes after removal: %d" % hb_graph.number_of_nodes())
-
-  return hb_graph
 
 

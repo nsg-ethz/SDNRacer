@@ -1,124 +1,90 @@
 import logging.config
-import time
-import os
-import sys
-import networkx as nx
+import itertools
 
 logger = logging.getLogger(__name__)
 
 
 class Cluster:
-  # functions to cluster subgraphs
+  _ids = itertools.count(0)
 
-  def __init__(self, resultdir, iso=True):
-    self.resultdir = resultdir
-    self.iso = iso.lower() not in ['false', '0']  # convert from string 'false' or '0' to bool
+  def __init__(self, graphs=[]):
+    self.id = Cluster._ids.next()   # Add cluster id to each group
+    self.representative = None      # representative graph of the group
+    self.graphs = []                # List of all graphs in the groups
+    self.write_ids = []             # List of all ids of write-race-events
+    self.properties = {             # Properties for "relation functions"
+        'pingpong': 0,              # Percentage of graphs containing a controller-switch-pingpong
+        'single': 0,                # Percentage of races origin from a single send event
+        'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
+        'write': 0                  # Percentage of graphs containing a common write event with another graph
+    }
 
-  def run(self, subgraphs):
-    # List of clusters, Each entry is a list of subgraphs in this cluster
-    clusters = [[x] for x in subgraphs]
+    if graphs:
+      self.add_graphs(graphs, update=True)
 
-    # Call Cluster Functions
-    if self.iso:
-      logger.debug("Cluster Isomorphic graphs")
-      clusters = self.cluster_iso(clusters)
-    else:
-      logger.debug("Skip Isomorphic clustering")
+      if self.representative is None:
+        self.representative = graphs[0]
 
-    self.write_clusters_info(clusters)
-
-    return clusters
-
-  def cluster_iso(self, clusters):
+  def get_write_ids(self):
     """
-    Clusters based on isomorphism. Only takes first subgraph in each cluster into account.
-
-    Args:
-      clusters: list of clusters
-
-    Returns: New list of clusters
-
+    Populate self.write_ids with the write-race-event-ids from all graphs.
     """
-    tstart = time.clock()
-    new_clusters = []
+    self.write_ids = []
+    for graph in self.graphs:
+      self.write_ids.extend(graph.graph['write_ids'])
 
-    # cluster isomorphic clusters based on the first subgraph in the cluster
-    for cluster in clusters:
-      curr = cluster[0]
-      addgraph = True
-      for new in new_clusters:
-        if nx.is_isomorphic(curr, new[0], node_match=self.node_match, edge_match=self.edge_match):
-          new.append(curr)
-          addgraph = False
+    return
+
+  def get_properties(self):
+    """ Calculates all properties. For a list of the properties see the init function."""
+    # Single Send
+    single = [g for g in self.graphs if len(g.graph['roots']) == 1]
+    self.properties['single'] = len(single) / float(len(self.graphs))
+
+    # Return path
+    ret = [g for g in self.graphs if len(g.graph['hosthandles']) > 0]
+    self.properties['return'] = len(ret) / float(len(self.graphs))
+
+    # Common write events
+    common = 0
+    # count each graph that has a write_race_id in common with another one
+    for graph in self.graphs:
+      for write_id in graph.graph['write_ids']:
+        if self.write_ids.count(write_id) > 1:
+          common += 1
+          # Cont each graph only once! -> break
           break
+    self.properties['write'] = common / float(len(self.graphs))
 
-      if addgraph:
-        new_clusters.append([curr])
+    # Pingpong
+    self.properties['pingpong'] = len([g for g in self.graphs if g.graph['pingpong']]) / float(len(self.graphs))
 
-    # Sort clusters based on their size, the lower the cluster ind, the more graphs are in the cluster.
-    new_clusters.sort(key=len, reverse=True)
+    return
 
-    # Log info
-    logger.info("Timing Iso: %f" % (time.clock() - tstart))
-    logger.info("Clusters before iso: %d" % (len(clusters)))
-    logger.info("Clusters after iso:  %d" % (len(new_clusters)))
-
-    return new_clusters
-
-  def node_match(self, n1, n2):
-    # Helperfunction for "cluster_iso"
-    # it returns True if two nodes have the same event type
-    return type(n1['event']) == type(n2['event'])
-
-  def edge_match(self, e1, e2):
-    # Helperfunction for "cluster_iso"
-    # it returns True if two edges have the same relation
-    return e1['rel'] == e2['rel']
-
-  def export_cluster_graphs(self, clusters, prefix='cluster', export_overview=False):
+  def add_graphs(self, graphs, update=False):
     """
-    Export the first graph of each cluster as .dot file.
+    Adds the graphs from iterable graphs to the cluster and updates all variables.
     Args:
-      clusters:   List of clusters
-      prefix:     Prefix of the exportet file names (default='cluster')
-      export_overview:   Boolean which indicates if an overview should be exportet as well, attention: SLOW (default=False)
-
+      graphs: Iterable of graphs to add
+      update: Wether the properties and write_ids should be updated
     """
-    # Export a graph of each cluster and "overview" of clusters (one graph of each cluster)
-    overview = []
-    for ind, cluster in enumerate(clusters):
-      export_path = os.path.join(self.resultdir, "%s_%03d.dot" % (prefix, ind))
-      nx.write_dot(cluster[0], export_path)
-      overview.append(cluster[0])
+    # Add graphs
+    self.graphs.extend(graphs)
+    # If there is no representative graph yet -> set it to the first one in the list
+    if self.representative is None:
+      self.representative = graphs[0]
 
-    # Export overview of all clusters
-    if export_overview:
-      export_path = os.path.join(self.resultdir, "%s_clusters_overview.dot" % prefix)
-      nx.write_dot(nx.disjoint_union_all(overview), export_path)
+    # Update Properties and write_ids
+    if update:
+      self.update()
+    return
 
-  def write_clusters_info(self, clusters, indent=True):
-    """
-    Writes the size of each cluster to the log (grouped by size).
-    Args:
-      clusters: List of clusters
-      indent:   Boolean, indicates if the entries should be indented by a tab.
-    """
-    # First write the number of subgraphs and the number of clusters
-    num_cluster = len(clusters)
-    num_subgraphs = sum([len(x) for x in clusters])
-    logger.debug("Total Clusters: %d, Total Subgraphs: %d" % (num_cluster, num_subgraphs))
-    curr_size = sys.maxint
-    start_ind = 0
-    if indent:
-      indent = "\t"
-    else:
-      indent = ""
-    for ind, cluster in enumerate(clusters):
-      if len(cluster) < curr_size:
-        if not ind == 0:
-          logger.debug("%sCluster %5d - %5d: %5d graphs each" % (indent, start_ind, ind - 1, curr_size))
-        curr_size = len(cluster)
-        start_ind = ind
+  def update(self):
+    """ Update write_ids and properties of the group."""
+    # Update write ids
+    self.get_write_ids()
+    # Update properties
+    self.get_properties()
+    return
 
-    logger.debug("%sCluster %5d - %5d: %5d graphs each" % (indent, start_ind, len(clusters) - 1, len(clusters[-1])))
 
