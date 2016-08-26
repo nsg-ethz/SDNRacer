@@ -36,9 +36,6 @@ class Clustering:
     logger.debug("Initialize clusters with isomorphic graphs")
     self.initialize_clusters()
 
-    print "IsIso: " + self.t_is_is
-    print "Match: " + self.t_matcher
-
     self.write_clusters_info()
 
     # Clustering
@@ -62,30 +59,7 @@ class Clustering:
     tstart = time.clock()
     logger.debug("Number of graphs: %d" % len(self.graphs))
 
-    ################################ nx.is_isomorphic ##################################
     # Put all isomorphic graphs in groups
-    tstart = time.time()
-    stack = self.graphs[:]    # Copy of graph list to process
-    groups = []               # List groups of graphs which are later used to create the clusters
-
-    while stack:
-      curr_graph = stack.pop()
-      added = False
-      # Check if the current graph is isomorphic with a graph from a existing group of graphs
-      for group in groups:
-        if nx.is_isomorphic(curr_graph, group[0], node_match=utils.node_match, edge_match=utils.edge_match):
-          group.append(curr_graph)
-          added = True
-          break
-
-      # if not -> prepare new cluster
-      if not added:
-        groups.append([curr_graph])
-    groups_iso = groups[:]
-    self.t_is_is += time.clock() -tstart
-    ################################ nx.is_isomorphic ##################################
-    # Put all isomorphic graphs in groups
-    tstart = time.clock()
     stack = self.graphs[:]  # Copy of graph list to process
     groups = []  # List groups of graphs which are later used to create the clusters
 
@@ -94,7 +68,7 @@ class Clustering:
       added = False
       # Check if the current graph is isomorphic with a graph from a existing group of graphs
       for group in groups:
-        graph_matcher = isomorphism.DiGraphMatcher(group[0], curr_graph, node_match=node_match, edge_match=utils.edge_match)
+        graph_matcher = isomorphism.DiGraphMatcher(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match)
         if graph_matcher.is_isomorphic():
           group.append(curr_graph)
           added = True
@@ -103,10 +77,6 @@ class Clustering:
       # if not -> prepare new cluster
       if not added:
         groups.append([curr_graph])
-    self.t_matcher += time.clock() - tstart
-
-    assert groups_iso == groups, 'Groups not equal'
-    ###################end
 
     # Create new cluster out of all groups and append it to the cluster list
     for group in groups:
