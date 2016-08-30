@@ -110,6 +110,14 @@ class Reduce:
       self.eval['Cluster %d' % ind]['Number of graphs'] = len(cluster.graphs)
       self.eval['Cluster %d' % ind]['Properties'] = cluster.properties
 
+    self.eval['graphs'] = []
+    for graph in self.subgraph.subgraphs:
+      self.eval['graphs'].append({'index': graph.graph['index'],
+                                  'single': True if len(graph.graph['roots']) == 1 else False,
+                                  'return': True if len(graph.graph['hosthandles']) == 1 else False,
+                                  'pingpong': True if graph.graph['pingpong'] else False,
+                                  'write_ids': graph.graph['write_ids']})
+
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
       json.dump(self.eval, outfile)
 

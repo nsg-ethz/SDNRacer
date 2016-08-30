@@ -254,12 +254,12 @@ class ClusterAlgorithm:
 
   def pingpong(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs which contain a controller-switch-pingpong"""
-    return 1 - abs(cluster1.properties['pingpong'] - cluster1.properties['pingpong'])
+    return 1 - abs(cluster1.properties['pingpong'] - cluster2.properties['pingpong'])
 
   def single_send(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs origin from a single send. """
-    return 1 - abs(cluster1.properties['single'] - cluster1.properties['single'])
+    return 1 - abs(cluster1.properties['single'] - cluster2.properties['single'])
 
   def return_path(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs containing a race on the return path."""
-    return 1 - abs(cluster1.properties['return'] - cluster1.properties['return'])
+    return 1 - abs(cluster1.properties['return'] - cluster2.properties['return'])

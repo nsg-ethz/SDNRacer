@@ -1,7 +1,7 @@
 import logging
 import time
 import itertools
-
+import sys
 import networkx as nx
 
 import utils
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class Preprocessor:
   # Provides different functions for preprocessing of the subgraphs
-  def __init__(self, hb_graph, races, remove_nodes=True, remove_pid=True):
+  def __init__(self, hb_graph, races, remove_nodes=True, remove_pid=True, remove_proactive=True):
     # set configuration options
     self.remove_nodes = remove_nodes.lower() not in ['false', '0']
     self.remove_pid = remove_pid.lower() not in ['false', '0']
@@ -41,7 +41,44 @@ class Preprocessor:
       logger.debug('Remove dispensable pid edges')
       self.remove_dispensable_pid_edges()
 
+    # Remove proactive delete_all nodes and according barrier request
+    if self.remove_proactive:
+      logger.debug("Remove proactive nodes")
+      self.remove_proactive()
+
     self.eval['time']['Total'] = time.clock() - tstart
+
+    return
+
+  def remove_proactive(self):
+    """ Removes the initial Proactive barrier_request after the removal of all flow rules in all switches at startup.
+    If there are other root events, no nodes are removed."""
+    # All root nodes
+    roots = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
+
+    nodes = []
+    remove_nodes = True
+    for root in roots:
+      # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+      if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
+          self.hb_graph.node[root]['event'].msg_type == 18):
+        nodes.append(root)
+        suc = self.hb_graph.successors(root)
+
+        # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
+        if (len(suc) == 1 and
+            isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
+            self.hb_graph.node[suc[0]]['event'].msg_type == 14):
+          nodes.append(suc[0])
+          suc = self.hb_graph.successors(suc[0])
+
+          # Third event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+          if (len(suc) == 1 and
+              isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
+              self.hb_graph.node[suc[0]]['event'].msg_type == 18):
+            nodes.append(suc[0])
+
+    self.hb_graph.remove_nodes_from(nodes)
 
     return
 
@@ -95,12 +132,12 @@ class Preprocessor:
         for suc1, suc2 in itertools.combinations(suc, 2):
           # Check if one edge is 'mid' and the other 'pid'
           if (self.hb_graph.edge[curr_node][suc1]['rel'] == 'mid' and
-              self.hb_graph.edge[curr_node][suc2]['rel'] == 'pid'):
+                  self.hb_graph.edge[curr_node][suc2]['rel'] == 'pid'):
             mid_node = suc[0]
             pid_node = suc[1]
 
           elif (self.hb_graph.edge[curr_node][suc[0]]['rel'] == 'pid' and
-                self.hb_graph.edge[curr_node][suc[1]]['rel'] == 'mid'):
+                    self.hb_graph.edge[curr_node][suc[1]]['rel'] == 'mid'):
             mid_node = suc[1]
             pid_node = suc[0]
 
@@ -163,5 +200,3 @@ class Preprocessor:
 
     self.eval['time']['Remove pid edges'] = time.clock() - tstart
     return
-
-

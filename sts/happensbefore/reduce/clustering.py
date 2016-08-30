@@ -59,17 +59,23 @@ class Clustering:
     tstart = time.clock()
     logger.debug("Number of graphs: %d" % len(self.graphs))
 
+    # Sort graphs based on number of nodes
+    self.graphs.sort(key=len, reverse=True)
+
     # Put all isomorphic graphs in groups
     stack = self.graphs[:]  # Copy of graph list to process
     groups = []  # List groups of graphs which are later used to create the clusters
 
-    while stack:
-      curr_graph = stack.pop()
+    for ind, curr_graph in enumerate(self.graphs):
+      logger.debug("Process graph %5d (%5d of %5d)" % (curr_graph.graph['index'], ind, len(self.graphs)))
       added = False
       # Check if the current graph is isomorphic with a graph from a existing group of graphs
-      for group in groups:
-        graph_matcher = isomorphism.DiGraphMatcher(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match)
-        if graph_matcher.is_isomorphic():
+      for group in reversed(groups):
+        # Because of the odering (sorted and reversed) we can break as soon as the graph is smaller
+        # as the graphs in the current group.
+        if len(group[0]) > len(group[0]):
+          break
+        if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match):
           group.append(curr_graph)
           added = True
           break
