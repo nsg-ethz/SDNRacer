@@ -43,7 +43,6 @@ class Reduce:
     # Import modules, this has to be done after the logger configuration because of the dynamic logging file path
     import preprocessor
     import clustering
-    import cluster
     import subgraph
     import cluster_algorithm
 
@@ -76,6 +75,7 @@ class Reduce:
                  'time': {}}
     self.eval['time']['Init'] = time.clock() - tstart
     self.eval['time']['hb_graph'] = thbgraph
+    self.eval['info']['Number of events'] = len(hb_graph.g)
     return
 
   def run(self):
@@ -112,17 +112,21 @@ class Reduce:
 
     self.eval['graphs'] = []
     for graph in self.subgraph.subgraphs:
-      self.eval['graphs'].append({'index': graph.graph['index'],
-                                  'single': True if len(graph.graph['roots']) == 1 else False,
-                                  'return': True if len(graph.graph['hosthandles']) == 1 else False,
-                                  'pingpong': True if graph.graph['pingpong'] else False,
-                                  'write_ids': graph.graph['write_ids']})
+      # replace the race from the dictionary with just the event ids (race object not serializable)
+      graph.graph['race'] = (graph.graph['race'].i_event.eid, graph.graph['race'].i_event.eid)
+      self.eval['graphs'].append(graph.graph)
+      # self.eval['graphs'].append({'index': graph.graph['index'],
+      #                             'single': True if len(graph.graph['roots']) == 1 else False,
+      #                             'return': True if len(graph.graph['hosthandles']) == 1 else False,
+      #                             'pingpong': True if graph.graph['pingpong'] else False,
+      #                             'write_ids': graph.graph['write_ids'],
+      #                             'iso_cluster': graph.graph['iso_cluster']})
 
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
       json.dump(self.eval, outfile)
 
     # Export groups
-    self.clustering.export_groups()
+    self.clustering.export_clusters()
 
     # summary
     self.logger.info("SUMMARY:")
@@ -132,7 +136,7 @@ class Reduce:
     # Cluster summary
     self.logger.info("Cluster Summary:")
     for key in self.eval.keys():
-      if not re.match(r'Cluster \d*',key):
+      if not re.match(r'Cluster \d*', key):
         continue
       self.logger.info("\t%s:" % key)
       for k, v in self.eval[key].iteritems():

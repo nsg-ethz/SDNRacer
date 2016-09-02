@@ -59,6 +59,7 @@ class Preprocessor:
     nodes = []
     remove_nodes = True
     for root in roots:
+      # Case 1 Floodlight: Init consist of Barrier - RemoveFlows - Barrier
       # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
       if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
           self.hb_graph.node[root]['event'].msg_type == 18):
@@ -77,6 +78,19 @@ class Preprocessor:
               isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
               self.hb_graph.node[suc[0]]['event'].msg_type == 18):
             nodes.append(suc[0])
+
+      # Case 2 POX: Init consist of RemoveFlows - Barrier
+      # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+      if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
+              self.hb_graph.node[root]['event'].msg_type == 14):
+        nodes.append(root)
+        suc = self.hb_graph.successors(root)
+
+        # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
+        if (len(suc) == 1 and
+              isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
+                self.hb_graph.node[suc[0]]['event'].msg_type == 18):
+          nodes.append(suc[0])
 
     self.hb_graph.remove_nodes_from(nodes)
 

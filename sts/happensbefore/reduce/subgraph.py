@@ -43,7 +43,7 @@ class Subgraph:
     tstart = time.clock()
     # Loop through all races
     for ind, race in enumerate(self.races):
-      logger.debug("Get Subgraph for race %d" % ind)
+      # logger.debug("Get Subgraph for race %d" % ind)
       stack = [race.i_event.eid, race.k_event.eid]
       nodes = []
 
@@ -86,9 +86,26 @@ class Subgraph:
       roots = [x for x in g.nodes() if not g.predecessors(x)]
       g.graph['roots'] = roots
 
+      # Set if the graph origins from a single send
+      g.graph['single'] = True if len(roots) == 1 else False
+
+      # Set if the graph origins from more than two roots
+      g.graph['multi'] = True if len(roots) > 2 else False
+
+      # Set if the race is with a AsyncFlowExpiry event
+      flow_expiry = False
+      for r in roots:
+        if isinstance(g.node[r]['event'], hb_events.HbAsyncFlowExpiry):
+          flow_expiry = True
+          break
+      g.graph['flowexpiry'] = flow_expiry
+
       # HostHandles (check if there are hosthandles in the graph -> return path affected)
       hosthandles = [x for x in g.nodes() if isinstance(g.node[x]['event'], hb_events.HbHostHandle)]
       g.graph['hosthandles'] = hosthandles
+
+      # Return path affected
+      g.graph['return'] = True if len(hosthandles) > 0 else False
 
       # Write events (list of all race-write-events in the graph)
       write_events = []

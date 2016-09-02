@@ -14,9 +14,11 @@ class Cluster:
     self.write_ids = []             # List of all ids of write-race-events
     self.properties = {             # Properties for "relation functions"
         'pingpong': 0,              # Percentage of graphs containing a controller-switch-pingpong
-        'single': 0,                # Percentage of races origin from a single send event
+        'single': 0,                # Percentage of races origin from a single root event
         'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
-        'write': 0                  # Percentage of graphs containing a common write event with another graph
+        'write': 0,                 # Percentage of graphs containing a common write event with another graph
+        'flowexpiry': 0,            # Percentage of graphs origin from flowexpiry
+        'multi': 0                  # Percentage of graphs origin from more than two root events
     }
 
     if graphs:
@@ -38,7 +40,7 @@ class Cluster:
   def get_properties(self):
     """ Calculates all properties. For a list of the properties see the init function."""
     # Single Send
-    single = [g for g in self.graphs if len(g.graph['roots']) == 1]
+    single = [g for g in self.graphs if g.graph['single']]
     self.properties['single'] = len(single) / float(len(self.graphs))
 
     # Return path
@@ -58,6 +60,12 @@ class Cluster:
 
     # Pingpong
     self.properties['pingpong'] = len([g for g in self.graphs if g.graph['pingpong']]) / float(len(self.graphs))
+
+    # FlowExpiry
+    self.properties['flowexpiry'] = len([g for g in self.graphs if g.graph['flowexpiry']]) / float(len(self.graphs))
+
+    # Multiple roots
+    self.properties['multi'] = len([g for g in self.graphs if g.graph['multi']]) / float(len(self.graphs))
 
     return
 
@@ -85,6 +93,32 @@ class Cluster:
     self.get_write_ids()
     # Update properties
     self.get_properties()
+    # Update representative graph
+    self.get_representative()
     return
+
+  def get_representative(self):
+    """
+    Sets representative graph based on the cluster properties.
+    """
+    # Get graph  properties
+    pingpong = True if self.properties['pingpong'] >= 0.5 else False
+    single = True if self.properties['single'] >= 0.5 else False
+    ret = True if self.properties['return'] >= 0.5 else False
+
+    # Get all graphs which satisfy this properties
+    candidates = []
+    for g in self.graphs:
+      if (g.graph['pingpong'] == pingpong and
+          g.graph['single'] == single and
+          g.graph['return'] == ret):
+        candidates.append(g)
+
+    # Take the graph with the smallest number of nodes
+    candidates.sort(key=len)
+
+    assert len(candidates) > 0, 'No graphs in candidate list'
+    self.representative = candidates[0]
+
 
 

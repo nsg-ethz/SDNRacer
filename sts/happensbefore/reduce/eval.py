@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Parameters
-ts = 6  # Titlesize
+ts = 8  # Titlesize
 fs = 6  # Fontsize
 
 
@@ -75,45 +75,71 @@ class Evaluation:
     num = 0
     for controller in sorted(self.eval_dicts.keys()):
       for topology in sorted(self.eval_dicts[controller].keys()):
-        n = len(self.eval_dicts[controller][topology].keys())
-        ind = np.arange(n)
-
-        width = 0.25
-
         pingpong = []
         single = []
         return_path = []
+        multi = []
+        flowexpiry = []
         labels = []
+        common_write = []
 
         plot_graph = False
         for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-          if 'graph' not in data:
+          if 'graphs' not in data:
             continue
           else:
             plot_graph = True
 
           print "\t Generate graph for %s, %s, %s steps" % (controller, topology, steps)
           # Calculate the percentage of the properties in each graph
-          pingpong.append(len([x for x in data['graphs'] if x['pingpong']]) / len(data['graphs']) * 100)
-          single.append(len([x for x in data['graphs'] if x['single']]) / len(data['graphs']) * 100)
-          return_path.append(len([x for x in data['graphs'] if x['return']]) / len(data['graphs']) * 100)
+          pingpong.append(len([x for x in data['graphs'] if x['pingpong'] == True]) / float(len(data['graphs'])) * 100)
+          single.append(len([x for x in data['graphs'] if x['single']]) / float(len(data['graphs'])) * 100)
+          return_path.append(len([x for x in data['graphs'] if x['return']]) / float(len(data['graphs'])) * 100)
+          multi.append(len([x for x in data['graphs'] if x['multi']]) / float(len(data['graphs'])) * 100)
+          flowexpiry.append(len([x for x in data['graphs'] if x['flowexpiry']]) / float(len(data['graphs'])) * 100)
           labels.append(str(steps))
 
+          # Calculate the number of graphs which share a write with another one
+          write_ids = []
+          c_w = 0
+          for g in data['graphs']:
+            write_ids.extend(g['write_ids'])
+          for g in data['graphs']:
+            for w_id in g['write_ids']:
+              if write_ids.count(w_id) > 1:
+                c_w += 1
+                break
+          common_write.append(c_w / float(len(data['graphs'])))
+
         if not plot_graph:
+          print "Skip %s, %s" % (controller, topology)
           continue
+
+        n = len(pingpong)
+        ind = np.arange(n)
+
+        width = 0.15
 
         # Plot
         ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
         bar1 = plt.bar(ind, pingpong, width, color='b')
         bar2 = plt.bar(ind + width, single, width, color='g')
         bar3 = plt.bar(ind + (2 * width), return_path, width, color='r')
+        bar4 = plt.bar(ind + (3 * width), common_write, width, color='c')
+        bar5 = plt.bar(ind + (4 * width), multi, width, color='y')
+        bar6 = plt.bar(ind + (5 * width), flowexpiry, width, color='m')
 
-        ax.set_title("%s, %s" % (controller, topology), fontsize=fs)
-        ax.set_ylabel('Percentage of graph property')
-        ax.set_xticks(ind + 1.5 * width)
-        ax.set_xticklabels(labels)
+        ax.set_title("%s, %s" % (controller, topology), fontsize=ts)
+        ax.set_ylim([0, 100])
+        ax.set_ylabel('Percentage of graph property', fontsize=fs)
+        ax.set_xlabel('Number of steps', fontsize=fs)
+        ax.set_xticks(ind + 3 * width)
+        ax.set_xticklabels(labels, fontsize=fs)
+        ax.tick_params(labelsize=fs)
 
-        ax.legend((bar1, bar2, bar3), ('pingpong', 'single send', 'return path'))
+        ax.legend((bar1, bar2, bar3, bar4, bar5, bar6),
+                  ('pingpong', 'single send', 'return path', 'common write', 'multi sends', 'flow expired'),
+                  fontsize=fs)
 
         num += 1
 
@@ -131,7 +157,7 @@ class Evaluation:
       for topology in self.eval_dicts[controller].keys():
         print "\tCalculate graph for %s, %s" % (controller, topology)
         ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
-        ax.set_title("%s, %s" % (controller, topology), fontsize=fs)
+        ax.set_title("%s, %s" % (controller, topology), fontsize=ts)
         t_total = []
         t_hb_graph = []
         x_values = []
@@ -147,10 +173,11 @@ class Evaluation:
         plt.plot(x_values, t_hb_graph, label='HbGraph', c='r')
         plt.plot(x_values, t_total, label='Total', c='b')
 
-        ax.legend(loc='upper left', prop={'size': 6})
+        ax.legend(loc='upper left', fontsize=fs)
 
-        ax.set_ylabel('Time [s]')
-        ax.set_xlabel('Number of Steps')
+        ax.set_ylabel('Time [s]', fontsize=fs)
+        ax.set_xlabel('Number of Steps', fontsize=fs)
+        ax.tick_params(labelsize=fs)
         ax.set_xticks(x_values)
 
         num += 1
@@ -177,6 +204,53 @@ class Evaluation:
             f.write(line)
 
       f.write(sep_line)
+
+      # Clustering infromation for meeting
+      f.write("\n\n\n")
+      for controller in sorted(self.eval_dicts.keys()):
+        for topology in sorted(self.eval_dicts[controller].keys()):
+          controller_str = ""
+          for s in controller.split("_"):
+            controller_str += ("%s " % s.capitalize())
+          f.write("%s%s\n" % (controller_str, topology))
+          for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
+            line = "%s\t" % str(steps)  # Number of steps
+            line += "%s\t" % data['info']['Number of events']
+            line += "%s\t" % data['info']['Number of graphs']
+            line += "%s\t" % data['clustering']['info']['Number of clusters after iso']
+            line += "%s\t" % data['info']['Number of clusters']
+            for ind in xrange(0,4):
+              if 'Cluster %d' % ind in data:
+                line += "%s\t" % data['Cluster %d' % ind]['Number of graphs']
+              else:
+                line += "-\t"
+            line += "\n"
+            f.write(line)
+
+      # Timing infromation for meeting
+      f.write("\n\n\n")
+      for controller in sorted(self.eval_dicts.keys()):
+        for topology in sorted(self.eval_dicts[controller].keys()):
+          controller_str = ""
+          for s in controller.split("_"):
+            controller_str += ("%s " % s.capitalize())
+          f.write("%s%s\n" % (controller_str, topology))
+          for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
+            line = "%s\t" % str(steps)  # Number of steps
+            line += "%s\t" % data['info']['Number of events']
+            line += "%s\t" % data['info']['Number of graphs']
+            line += "%.3f s\t" % data['time']['total']
+            line += "%.3f s\t" % data['time']['hb_graph']
+            line += "%.3f s\t" % data['preprocessor']['time']['Total']
+            line += "%.3f s\t" % data['subgraph']['time']['Total']
+            line += "%.3f s\t" % data['clustering']['time']['Initialize cluster']
+            line += "%.3f s\t" % data['clustering']['time']['Calculate distance matrix']
+            line += "%.3f s\t" % data['clustering']['time']['Run DBScan Algorithm']
+            line += "\n"
+            f.write(line)
+
+
+
 
 
 if __name__ == '__main__':

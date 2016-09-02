@@ -67,7 +67,7 @@ class Clustering:
     groups = []  # List groups of graphs which are later used to create the clusters
 
     for ind, curr_graph in enumerate(self.graphs):
-      logger.debug("Process graph %5d (%5d of %5d)" % (curr_graph.graph['index'], ind, len(self.graphs)))
+      # logger.debug("Process graph %5d (%5d of %5d)" % (curr_graph.graph['index'], ind, len(self.graphs)))
       added = False
       # Check if the current graph is isomorphic with a graph from a existing group of graphs
       for group in reversed(groups):
@@ -75,7 +75,7 @@ class Clustering:
         # as the graphs in the current group.
         if len(group[0]) > len(group[0]):
           break
-        if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match):
+        if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
           group.append(curr_graph)
           added = True
           break
@@ -83,6 +83,11 @@ class Clustering:
       # if not -> prepare new cluster
       if not added:
         groups.append([curr_graph])
+
+    # Add isomorphic cluster id to graph for evaluation
+    for ind, group in enumerate(groups):
+      for graph in group:
+        graph.graph['iso_cluster'] = ind
 
     # Create new cluster out of all groups and append it to the cluster list
     for group in groups:
@@ -116,7 +121,7 @@ class Clustering:
 
     logger.debug("\tCluster %5d - %5d: %5d graphs each" % (start_ind, len(self.clusters) - 1, curr_size))
 
-  def export_groups(self):
+  def export_clusters(self):
     """ Exports the representative graphs in the result directory and creats a folder for each group
     to export all informative graphs in the group."""
     for ind, cluster in enumerate(self.clusters):
@@ -126,13 +131,18 @@ class Clustering:
       export_path = os.path.join(self.resultdir, 'cluster_%03d' % ind)
       if not os.path.exists(export_path):
         os.makedirs(export_path)
+      iso_exported = []
       for graph in cluster.graphs:
+        if graph.graph['iso_cluster'] not in iso_exported:
+          nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'iso_%03d.dot' % graph.graph['iso_cluster']))
+          iso_exported.append(graph.graph['iso_cluster'])
         nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
 
     # Export outliers (remaining)
-    export_path = os.path.join(self.resultdir, 'rest')
-    if not os.path.exists(export_path):
-      os.makedirs(export_path)
-    for cluster in self.remaining:
-      for graph in cluster.graphs:
-        nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
+    if self.remaining:
+      export_path = os.path.join(self.resultdir, 'rest')
+      if not os.path.exists(export_path):
+        os.makedirs(export_path)
+      for cluster in self.remaining:
+        for graph in cluster.graphs:
+          nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))

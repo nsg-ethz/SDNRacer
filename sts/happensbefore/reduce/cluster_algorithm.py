@@ -21,6 +21,8 @@ class ClusterAlgorithm:
                score_contains_pingpong=1,
                score_single_send=1,
                score_return_path=1,
+               score_flow_expiry=1,
+               score_multi_send=1,
                epsilon=1,
                min_cluster_size=2):
     self.resultdir = resultdir
@@ -38,6 +40,10 @@ class ClusterAlgorithm:
       self.score_dict['single_send'] = float(score_single_send)
     if float(score_return_path) != 0:
       self.score_dict['return_path'] = float(score_return_path)
+    if float(score_return_path) != 0:
+      self.score_dict['flow_expiry'] = float(score_flow_expiry)
+    if float(score_return_path) != 0:
+      self.score_dict['multi_send'] = float(score_multi_send)
 
     # Maximum score
     self.max_score = sum(self.score_dict.values())
@@ -257,9 +263,19 @@ class ClusterAlgorithm:
     return 1 - abs(cluster1.properties['pingpong'] - cluster2.properties['pingpong'])
 
   def single_send(self, cluster1, cluster2):
-    """ Score based on similarity in terms of percentage of graphs origin from a single send. """
+    """ Score based on similarity in terms of percentage of graphs origin from a single event. """
     return 1 - abs(cluster1.properties['single'] - cluster2.properties['single'])
 
   def return_path(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs containing a race on the return path."""
     return 1 - abs(cluster1.properties['return'] - cluster2.properties['return'])
+
+  def flow_expiry(self, cluster1, cluster2):
+    """ Score based on similarity in terms of percentage of graphs originate from AsyncFlowExpiry events."""
+    return 1 - abs(cluster1.properties['flowexpiry'] - cluster2.properties['flowexpiry'])
+
+  def multi_send(self, cluster1, cluster2):
+    """ Score based on similarity in terms of percentage of graphs origin from more than two events."""
+    return 1 - abs(cluster1.properties['multi'] - cluster2.properties['multi'])
+
+
