@@ -18,6 +18,10 @@ class Preprocessor:
     self.remove_pid = remove_pid.lower() not in ['false', '0']
     self.hb_graph = hb_graph
     self.races = races
+    self.race_ids = []
+    for race in races:
+      self.race_ids.append(race.i_event.eid)
+      self.race_ids.append(race.k_event.eid)
     self.eval = {'time': {}}
 
   def run(self):
@@ -57,40 +61,58 @@ class Preprocessor:
     roots = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
 
     nodes = []
-    remove_nodes = True
     for root in roots:
+      skip = False
       # Case 1 Floodlight: Init consist of Barrier - RemoveFlows - Barrier
       # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+      candidates = []
       if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
           self.hb_graph.node[root]['event'].msg_type == 18):
-        nodes.append(root)
+        candidates.append(root)
         suc = self.hb_graph.successors(root)
 
         # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
         if (len(suc) == 1 and
             isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
             self.hb_graph.node[suc[0]]['event'].msg_type == 14):
-          nodes.append(suc[0])
+          candidates.append(suc[0])
           suc = self.hb_graph.successors(suc[0])
 
           # Third event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
           if (len(suc) == 1 and
               isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
               self.hb_graph.node[suc[0]]['event'].msg_type == 18):
-            nodes.append(suc[0])
+            candidates.append(suc[0])
+            for node in candidates:
+              if node in self.race_ids:
+                skip = True
+
+            if skip:
+              continue
+            nodes.extend(candidates)
+            continue
+
+      candidates = []
 
       # Case 2 POX: Init consist of RemoveFlows - Barrier
       # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
       if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
               self.hb_graph.node[root]['event'].msg_type == 14):
-        nodes.append(root)
+        candidates.append(root)
         suc = self.hb_graph.successors(root)
 
         # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
         if (len(suc) == 1 and
               isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
                 self.hb_graph.node[suc[0]]['event'].msg_type == 18):
-          nodes.append(suc[0])
+          candidates.append(suc[0])
+          for node in candidates:
+            if node in self.race_ids:
+              skip = True
+
+          if skip:
+            continue
+          nodes.extend(candidates)
 
     self.hb_graph.remove_nodes_from(nodes)
 

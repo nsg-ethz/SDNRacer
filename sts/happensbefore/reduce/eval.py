@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 ts = 8  # Titlesize
 fs = 6  # Fontsize
 
+pltwidth = 8
+plthight = 3
+
 
 class Evaluation:
   def __init__(self, eval_folder):
@@ -69,7 +72,7 @@ class Evaluation:
     print "Evaluate Score functions"
     # Evaluate score functions
     # Generate boxplot
-    fig = plt.figure()
+    fig = plt.figure(figsize=(pltwidth, plthight * self.num_cont_topo))
     plt.hold(True)
 
     num = 0
@@ -100,10 +103,8 @@ class Evaluation:
           labels.append(str(steps))
 
           # Calculate the number of graphs which share a write with another one
-          write_ids = []
+          write_ids = [g['write_ids'] for g in data['graphs']]
           c_w = 0
-          for g in data['graphs']:
-            write_ids.extend(g['write_ids'])
           for g in data['graphs']:
             for w_id in g['write_ids']:
               if write_ids.count(w_id) > 1:
@@ -118,7 +119,7 @@ class Evaluation:
         n = len(pingpong)
         ind = np.arange(n)
 
-        width = 0.15
+        width = 0.10
 
         # Plot
         ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
@@ -148,13 +149,13 @@ class Evaluation:
 
     # Create timing graph for each controller and module
     print "Evaluate timing information"
-    fig = plt.figure()
+    fig = plt.figure(figsize=(pltwidth, plthight * self.num_cont_topo))
     plt.hold(True)
 
     # One subplot for each controller and topology
     num = 0
-    for controller in self.eval_dicts.keys():
-      for topology in self.eval_dicts[controller].keys():
+    for controller in sorted(self.eval_dicts.keys()):
+      for topology in sorted(self.eval_dicts[controller].keys()):
         print "\tCalculate graph for %s, %s" % (controller, topology)
         ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
         ax.set_title("%s, %s" % (controller, topology), fontsize=ts)
@@ -213,6 +214,8 @@ class Evaluation:
           for s in controller.split("_"):
             controller_str += ("%s " % s.capitalize())
           f.write("%s%s\n" % (controller_str, topology))
+          f.write("Steps\t# Events\t# Races\t# Isomorphic Clusters\t# Clusters after DBScan\t"
+                  "Cluster 0\tCluster 1\tCluster 2\tCluster 3\n")
           for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
             line = "%s\t" % str(steps)  # Number of steps
             line += "%s\t" % data['info']['Number of events']
@@ -235,6 +238,8 @@ class Evaluation:
           for s in controller.split("_"):
             controller_str += ("%s " % s.capitalize())
           f.write("%s%s\n" % (controller_str, topology))
+          f.write("Steps\t# Events\t# Races\tTotal Time\tHb_Graph\tPreprocess hb_graph\t"
+                  "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tDBScan\n")
           for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
             line = "%s\t" % str(steps)  # Number of steps
             line += "%s\t" % data['info']['Number of events']
