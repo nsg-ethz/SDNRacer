@@ -583,7 +583,8 @@ class Fuzzer(ControlFlow):
             if len(host.interfaces) > 0:
               if len(self.params.vip_ip_list) > 0 and self.random.random() < self.params.vip_traffic_percentage:
                 f.write("send vip icmp: %s\n" % host)
-                dst_ip = IPAddr(random.choice(self.params.vip_ip_list))
+                # RM switched random.choice to self.random
+                dst_ip = IPAddr(self.random.choice(self.params.vip_ip_list))
                 msg.event("Injecting a random VIP packet to "+str(dst_ip))
                 traffic_type = "icmp_flow"
                 # traffic_type = "icmp_ping"
@@ -636,7 +637,8 @@ class Fuzzer(ControlFlow):
         old_ingress_port_no = access_link.switch_port.port_no
         live_edge_switches = list(self.simulation.topology.live_edge_switches)
         if len(live_edge_switches) > 0:
-          new_switch = random.choice(live_edge_switches)
+          # RM random.coice -> self.random.choice
+          new_switch = self.random.choice(live_edge_switches)
           new_switch_dpid = new_switch.dpid
           new_port_no = max(new_switch.ports.keys()) + 1
           msg.event("Migrating host %s, New switch %s, New port %s" %

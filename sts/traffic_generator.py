@@ -128,7 +128,8 @@ class TrafficGenerator (object):
     if force_request:
       ping.type = TYPE_ECHO_REQUEST
     else:
-      ping.type = random.choice([TYPE_ECHO_REQUEST, TYPE_ECHO_REPLY])
+      # RM changed random to self.random
+      ping.type = self.random.choice([TYPE_ECHO_REQUEST, TYPE_ECHO_REPLY])
     if payload_content == "" or payload_content is None:
       payload_content = "Ping" * 12
     ping.payload = payload_content
