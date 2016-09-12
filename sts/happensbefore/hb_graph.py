@@ -665,7 +665,7 @@ class HappensBeforeGraph(object):
           label += "\\nPkt: " + pkt
       g.node[eid]['label'] = label
       g.node[eid]['shape'] = shape
-    for src, dst, data in g.edges_iter(data=True):
+    for src, dst, data in g.edges(data=True):
       g.edge[src][dst]['label'] = data['rel']
       if data['rel'] == 'race':
         if data['harmful']:
