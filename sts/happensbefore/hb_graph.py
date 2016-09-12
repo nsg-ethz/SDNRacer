@@ -163,9 +163,7 @@ class HappensBeforeGraph(object):
       
   def update_path_cache(self):
     print "Updating has_path path cache..."
-    self._cached_paths = nx.all_pairs_shortest_path_length(self.g)
-    print type(self._cached_paths)
-    sys.exit()
+    self._cached_paths = dict(nx.all_pairs_shortest_path_length(self.g))
       
   def has_path(self, src_eid, dst_eid, bidirectional=True, use_path_cache=True):  
     if self.disable_path_cache or not use_path_cache:
