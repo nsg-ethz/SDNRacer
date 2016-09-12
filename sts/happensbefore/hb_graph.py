@@ -118,7 +118,7 @@ class HappensBeforeGraph(object):
 
   @property
   def events(self):
-    for _, data in self.g.nodes_iter(True):
+    for _, data in self.g.nodes(True):
       yield data['event']
 
   @property
@@ -607,7 +607,7 @@ class HappensBeforeGraph(object):
     """
     Adds proper annotation for the graph to make drawing it more pleasant.
     """
-    for eid, data in g.nodes_iter(data=True):
+    for eid, data in g.nodes(data=True):
       event = data.get('event', None)
       if not event and allow_none_event:
         label = "N %s" % eid
