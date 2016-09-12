@@ -125,8 +125,25 @@ class Reduce:
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
       json.dump(self.eval, outfile)
 
-    # Export groups
+    # Export clusters
     self.clustering.export_clusters()
+
+    # Generate Info file
+    with open(os.path.join(self.resultdir, 'info.txt'), 'w') as outfile:
+      # General Information
+      outfile.write("General Information\n")
+      outfile.write("\t%30s - %s\n" % ("Number of events", self.eval['info']['Number of events']))
+      outfile.write("\t%30s - %s\n" % ("Number of races", self.eval['info']['Number of graphs']))
+      outfile.write("\t%30s - %s\n" % ("Initialized clusters (iso)", self.eval['clustering']['info']['Number of clusters after iso']))
+      outfile.write("\t%30s - %s\n" % ("Final number of clusters", self.eval['info']['Number of clusters']))
+
+      # Cluster information
+      for ind, cluster in enumerate(self.clustering.clusters):
+        outfile.write("\nCluster %d\n" % ind)
+        outfile.write("\t%30s - %s\n" % ("Number of graphs", len(cluster.graphs)))
+        outfile.write("\tProperties:\n")
+        for prop, value in cluster.properties.iteritems():
+          outfile.write("\t\t%30s - %s\n" % (prop, value))
 
     # summary
     self.logger.info("SUMMARY:")

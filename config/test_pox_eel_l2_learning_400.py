@@ -32,6 +32,7 @@ topology_params = "num_levels=%d" % num
 steps = 400
 # Where should the output files be written to
 results_dir = "results/pox_eel_learningswitch-%s%d-steps%s" % (topology_class.__name__, num, steps)
+seed = 158
 
 apps = None
 
@@ -58,6 +59,7 @@ simulation_config = SimulationConfig(controller_configs=controllers,
 control_flow = Fuzzer(simulation_config,
                       input_logger=InputLogger(),
                       initialization_rounds=30,
+                      random_seed=seed,
                       send_all_to_all=False,
                       check_interval=10,
                       delay=0.1,

@@ -30,6 +30,7 @@ topology_params = "num_hosts=%d" % num
 
 steps = 800
 results_dir = "results/floodlight_loadbalancer-%s%d-steps%s" % (topology_class.__name__, num, steps)
+seed = 158
 
 apps = [AppFloodlightLoadBalancer('loadbalancer', cwd='./', controller='localhost:8080')]
 
@@ -55,6 +56,7 @@ simulation_config = SimulationConfig(controller_configs=controllers,
 control_flow = Fuzzer(simulation_config,
                       input_logger=InputLogger(),
                       initialization_rounds=30,
+                      random_seed=seed,
                       send_all_to_all=True,  # needs to be True otherwise loadbalancer will throw errors.
                       check_interval=10,
                       delay=0.1,

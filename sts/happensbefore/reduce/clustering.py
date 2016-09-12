@@ -146,3 +146,6 @@ class Clustering:
       for cluster in self.remaining:
         for graph in cluster.graphs:
           nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
+
+      raise RuntimeError("There are graphs ramining!")
+
