@@ -219,7 +219,7 @@ class Preprocessor:
     while nodes_removed > 0:
       nodes_removed = 0
       # Get leave nodes
-      leaf_nodes = [x for x in self.hb_graph.nodes_iter() if not self.hb_graph.successors(x)]
+      leaf_nodes = [x for x in self.hb_graph.nodes() if not self.hb_graph.successors(x)]
       for leaf in leaf_nodes:
         # If a leaf node is not part of a race, add it for removal
         if leaf not in race_ids:
