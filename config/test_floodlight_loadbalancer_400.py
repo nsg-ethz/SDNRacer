@@ -30,6 +30,7 @@ topology_params = "num_hosts=%d" % num
 
 steps = 400
 results_dir = "results/floodlight_loadbalancer-%s%d-steps%s" % (topology_class.__name__, num, steps)
+seed = 158
 
 apps = [AppFloodlightLoadBalancer('loadbalancer', cwd='./', controller='localhost:8080')]
 
