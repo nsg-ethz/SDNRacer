@@ -1,6 +1,8 @@
 import logging.config
 import time
+import sys
 import numpy as np
+import scipy
 
 import utils
 import cluster
@@ -15,7 +17,7 @@ class ClusterAlgorithm:
 
   def __init__(self,
                resultdir,
-               max_groups=5,
+               max_clusters=5,
                score_same_write=1,
                score_iso_components=1,
                score_contains_pingpong=1,
@@ -23,10 +25,10 @@ class ClusterAlgorithm:
                score_return_path=1,
                score_flow_expiry=1,
                score_multi_send=1,
-               epsilon=1,
-               min_cluster_size=2):
+               linkage='complete',
+               epsilon=1):
     self.resultdir = resultdir
-    self.max_groups = int(max_groups)
+    self.max_clusters = int(max_clusters)
 
     # Create score dictionary for all scores != 0. Form: 'function_name': score
     self.score_dict = {}
@@ -50,7 +52,7 @@ class ClusterAlgorithm:
 
     # DB Scan variables
     self.epsilon = float(epsilon)
-    self.min_cluster_size = float(min_cluster_size)
+    self.linkage = linkage
 
     # Dictionary for the evaluation
     self.eval = {'score': {},
@@ -66,154 +68,62 @@ class ClusterAlgorithm:
     self.clusters = clusters
     # Calculate closeness between all graphs
     tstart = time.clock()
-    logger.debug("Calculate closeness matrix")
-    closeness = self.get_closeness_matrix()
-    self.eval['time']['Calculate distance matrix'] = time.clock() - tstart
+    ts = time.clock()
+    logger.debug("Calculate distance matrix")
+    distance = scipy.spatial.distance.squareform(self.distance_matrix())
+    self.eval['time']['Calculate distance matrix'] = time.clock() - ts
 
-    # Rund dbscan
-    tstart = time.clock()
-    logger.debug("Run DBScan algorithm")
-    cluster_ind, outliers = self.db_scan(closeness)
-    self.eval['time']['Run DBScan Algorithm'] = time.clock() - tstart
-    
-    # Create the new cluster list
-    tstart = time.clock()
-    logger.debug("Create new clusters")
-    self.clusters, self.remaining = self.create_new_clusters(cluster_ind, outliers)
-    self.eval['time']['Create new clusters'] = time.clock() - tstart
-    
+    ts = time.clock()
+    logger.debug("Calculate clustering")
+    linkage_matrix = scipy.cluster.hierarchy.linkage(distance, method=self.linkage)
+    self.eval['time']['Calculate clustering'] = time.clock() - ts
+
+    ts = time.clock()
+    logger.debug("Assign new clusters")
+    fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, self.epsilon)
+
+    self.clusters = self.create_new_clusters(fcluster)
+    self.eval['time']['Assign new clusters'] = time.clock() - ts
+
     self.eval['time']['Total'] = time.clock() - tstart
 
     return self.clusters, self.remaining
 
-  def db_scan(self, closeness):
+  def create_new_clusters(self, fclusters):
     """
-    Clustering with the dbscan algorithm.
-    Args:
-      closeness: Closeness Matrix
-
-    Returns:
-      cluster_ind: List of the new clusters, (elements are indices of the current clusters in self.clusters)
-      outliers:     List of the outliers, which are not part of a cluster (elements are indices of the current clusters)
-
+    Assigns the current clusters to the new clusters returnd by the fcluster function.
     """
-    # DBScan
-    visited = []
-    outliers = []
-    cluster_ind = []
-    in_cluster = []
+    new_clusters = [None] * max(fclusters)
 
-    # Process all elements (indices in group list and distance matrix)
-    for element in range(0, len(self.clusters)):
-      if element in visited:
-        continue
+    # Generate all new clusters and assign the graphs of the current clusters to them
+    for ind, clu in enumerate(fclusters):
+      if new_clusters[clu - 1] is None:
+        new_clusters[clu - 1] = cluster.Cluster()
+      new_clusters[clu - 1].add_graphs(self.clusters[ind].graphs)
 
-      visited.append(element)
-      neighbors = self.get_neighbors(element, closeness)
-      # If less then min_points in neighborhood -> outlier
-      if len(neighbors) < self.min_cluster_size:
-        outliers.append(element)
-        continue
+    # Update all properties
+    for c in new_clusters:
+      c.update()
 
-      # Element is a core point -> new cluster
-      cluster = [element]
-      in_cluster.append(element)
+    return new_clusters
 
-      # Add all points in the expanded neighborhood to this cluster
-      while neighbors:
-        neighbor = neighbors.pop()
-        # If this point is not part of any cluster add it
-        if neighbor not in in_cluster:
-          cluster.append(neighbor)
-          in_cluster.append(neighbor)
-
-        # If the neighbor was not visited, check the neighborhood, if its a core point -> add its neighbors
-        if neighbor not in visited:
-          visited.append(neighbor)
-          n_neighbors = self.get_neighbors(neighbor, closeness)
-          if len(neighbors) >= self.min_cluster_size:
-            neighbors.extend(n_neighbors)
-
-      cluster_ind.append(cluster)
-
-    # Different validation checks
-    tstart = time.clock()
-    # Check if all elements are visited exactly once
-    assert len(visited) == len(set(visited)), "DBScan: Dublicates in visited."
-    assert set(visited) == set(range(0, len(self.clusters))), "DBScan: Not all elements in visited"
-
-    # Check if in_cluster is complete and there is no element in more than one cluster
-    complete_in_clusters = []
-    for c in cluster_ind:
-      complete_in_clusters.extend(c)
-    assert len(complete_in_clusters) == len(set(complete_in_clusters)), "DBScan: Same element in more than one cluster"
-    assert set(in_cluster) == set(complete_in_clusters), "DBScan: in_cluster not complete"
-
-    # Check if there are dublicate elements in outliers
-    assert len(outliers) == len(set(outliers)), "DBScan: Dublicates in outliers"
-
-    # Check if each element is either in a cluster or in outliers
-    all_elements = set(in_cluster + outliers)
-    assert all_elements == set(visited), "DBScan: Not all elements processed"
-    self.eval['time']['DBScan Checks'] = time.clock() - tstart
-    
-    return cluster_ind, outliers
-    
-  def create_new_clusters(self, cluster_ind, outliers):
+  def distance_matrix(self):
     """
-    Creates a new list of clusters out of a list of clusters where each element is an index of a current cluster.
-    Puts the outliers in a separate list.
-    Args:
-      cluster_ind: List of clusters, where each cluster element is an index in the current list
-      outliers:    List of outliers, where each element is an index in the current list
-
-    Returns:
-      new_cluster: List of the new clusters (not indices anymore)
-      remaining: List of the remaining cluster, which where not added to a group
-
+    Calculates and returns distance matrix, where element mat[i][k] represents the distance between cluster i and k.
     """
-    new_clusters = []
-    remaining = []
-    for clust in cluster_ind:
-      curr_cluster = cluster.Cluster()
-      for c in clust:
-        curr_cluster.add_graphs(self.clusters[c].graphs)
-
-      # Update Properties and write_ids
-      curr_cluster.update()
-      new_clusters.append(curr_cluster)
-
-    # Put outliers in remaining
-    for c in outliers:
-      remaining.append(self.clusters[c])
-
-    return new_clusters, remaining
-
-  def get_neighbors(self, p, closeness):
-    """
-    Returns all points around p within max distance of eps (including p)
-    """
-    neighbors = []
-    for ind, x in enumerate(closeness[p]):
-      if x >= self.epsilon:
-        neighbors.append(ind)
-
-    return neighbors
-
-  def get_closeness_matrix(self):
     mat = np.zeros((len(self.clusters), len(self.clusters)))
     for ind1, g1 in enumerate(self.clusters):
       for ind2, g2 in enumerate(self.clusters[0:(ind1 + 1)]):
         if g1 == g2:
           mat[ind1, ind2] = 0
-        mat[ind1, ind2] = self.closeness(g1, g2)
+        mat[ind1, ind2] = self.distance(g1, g2)
         mat[ind2, ind1] = mat[ind1, ind2]
 
     return mat
 
-  def closeness(self, cluster1, cluster2):
+  def distance(self, cluster1, cluster2):
     """
-    Returns the closenes (grade of relation) between two graphs.
+    Returns the distance between two clusters.
     """
     tot_score = 0
 
@@ -224,7 +134,7 @@ class ClusterAlgorithm:
       self.eval['score'][f].append(score)
 
     # Invert score (closeness to distance)
-    return tot_score
+    return self.max_score - tot_score
 
   def iso_components(self, cluster1, cluster2):
     """

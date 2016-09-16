@@ -75,10 +75,11 @@ class Clustering:
         # as the graphs in the current group.
         if len(group[0]) > len(group[0]):
           break
-        if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
-          group.append(curr_graph)
-          added = True
-          break
+        if nx.faster_could_be_isomorphic(group[0], curr_graph):
+          if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
+            group.append(curr_graph)
+            added = True
+            break
 
       # if not -> prepare new cluster
       if not added:

@@ -29,7 +29,7 @@ topology_params = "num_hosts=%d" % num
 # topology_params = "num_levels=%d" % num
 
 steps = 200
-results_dir = "results/floodlight_loadbalancer-%s%d-steps%s-2" % (topology_class.__name__, num, steps)
+results_dir = "results/floodlight_loadbalancer-%s%d-steps%s" % (topology_class.__name__, num, steps)
 seed = 158    # Set None for random seed for each run
 
 

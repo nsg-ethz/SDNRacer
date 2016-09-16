@@ -138,12 +138,8 @@ class Reduce:
       outfile.write("\t%30s - %s\n" % ("Final number of clusters", self.eval['info']['Number of clusters']))
 
       # Cluster information
-      for ind, cluster in enumerate(self.clustering.clusters):
-        outfile.write("\nCluster %d\n" % ind)
-        outfile.write("\t%30s - %s\n" % ("Number of graphs", len(cluster.graphs)))
-        outfile.write("\tProperties:\n")
-        for prop, value in cluster.properties.iteritems():
-          outfile.write("\t\t%30s - %s\n" % (prop, value))
+      for cluster in self.clustering.clusters:
+        outfile.write("\n%s" % cluster)
 
     # summary
     self.logger.info("SUMMARY:")
@@ -152,12 +148,8 @@ class Reduce:
 
     # Cluster summary
     self.logger.info("Cluster Summary:")
-    for key in self.eval.keys():
-      if not re.match(r'Cluster \d*', key):
-        continue
-      self.logger.info("\t%s:" % key)
-      for k, v in self.eval[key].iteritems():
-        self.logger.info("%30s - %s" % (k, v))
+    for cluster in self.clustering.clusters:
+      self.logger.info("\n%s" % cluster)
 
     # summary timing
     self.logger.info("Timing:")

@@ -1436,7 +1436,7 @@ class Main(object):
   
       racing_versions, racing_versions_tuples, racing_versions_tuples_dict = self.graph.find_inconsistent_updates()
       t8 = time.time()
-      
+
       if not self.no_dot_files:
         self.graph.store_traces(self.results_dir, print_packets=True, subgraphs=packet_traces)
         print "Saving HB graph to:", self.output_filename

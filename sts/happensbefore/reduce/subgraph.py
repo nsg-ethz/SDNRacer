@@ -62,13 +62,32 @@ class Subgraph:
       subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
 
       nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
-      # Verify that the only leaf-nodes are the race events
-      leaves = [x for x in subg.nodes() if not subg.successors(x)]
-      assert len(leaves) == 2, 'Building subgraphs: Not exactly two leaf-nodes (%d)' % len(leaves)
-      assert race.i_event.eid in leaves, 'Building subgraphs: i-event not in leaves (leaves: %s)' % leaves
-      assert race.k_event.eid in leaves, 'Building subgraphs: k-event not in leaves (leaves: %s)' % leaves
+
+      # Check if the graph is loop free
+      abort = False
+      cycles = list(nx.simple_cycles(subg))
+      if cycles:
+        abort = True
+        logger.error("Cycles found in graph %d (Size: %d)" % (ind, len(subg.nodes())))
+        for i, cycle in enumerate(cycles):
+          logger.debug("Cycle %d: %s" % (i, cycle))
+          for node in cycle:
+            event = subg.node[node]['event']
+            logger.debug("Event %d" % node)
+            if hasattr(event, 'packet'):
+              logger.debug("Packet: %s" % event.packet)
+
+      else:
+        # Verify that the only leaf-nodes are the race events
+        leaves = [x for x in subg.nodes() if not subg.successors(x)]
+        assert len(leaves) == 2, 'Building subgraphs: Not exactly two leaf-nodes (%d)' % len(leaves)
+        assert race.i_event.eid in leaves, 'Building subgraphs: i-event not in leaves (leaves: %s)' % leaves
+        assert race.k_event.eid in leaves, 'Building subgraphs: k-event not in leaves (leaves: %s)' % leaves
 
       self.subgraphs.append(subg)
+
+    if abort:
+      raise RuntimeError("Found cycle, see log")
 
     self.eval['time']['Generate subgraphs'] = time.clock() - tstart
     return

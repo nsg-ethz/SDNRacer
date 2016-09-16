@@ -12,11 +12,12 @@ class Cluster:
     self.representative = None      # representative graph of the group
     self.graphs = []                # List of all graphs in the groups
     self.write_ids = []             # List of all ids of write-race-events
+    self.common_writes = 0          # Percentage of graphs containing a common write event with another graph
+
     self.properties = {             # Properties for "relation functions"
         'pingpong': 0,              # Percentage of graphs containing a controller-switch-pingpong
         'single': 0,                # Percentage of races origin from a single root event
         'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
-        'write': 0,                 # Percentage of graphs containing a common write event with another graph
         'flowexpiry': 0,            # Percentage of graphs origin from flowexpiry
         'multi': 0                  # Percentage of graphs origin from more than two root events
     }
@@ -56,7 +57,7 @@ class Cluster:
           common += 1
           # Cont each graph only once! -> break
           break
-    self.properties['write'] = common / float(len(self.graphs))
+    self.common_writes = common / float(len(self.graphs))
 
     # Pingpong
     self.properties['pingpong'] = len([g for g in self.graphs if g.graph['pingpong']]) / float(len(self.graphs))
@@ -119,6 +120,17 @@ class Cluster:
 
     assert len(candidates) > 0, 'No graphs in candidate list'
     self.representative = candidates[0]
+
+  def __str__(self):
+    s = 'Cluster %s\n' % self.id
+    s += "\t%30s - %s\n" % ("Number of graphs", len(self.graphs))
+    s += "\tProperties:\n"
+    for prop, value in self.properties.iteritems():
+      s += "\t\t%30s - %s\n" % (prop, value)
+    s += "\t%30s - %s\n" % ("Common writes", self.common_writes)
+
+    return s
+
 
 
 
