@@ -67,7 +67,6 @@ class ClusterAlgorithm:
   def run(self, clusters):
     self.clusters = clusters
     # Calculate closeness between all graphs
-    tstart = time.clock()
     ts = time.clock()
     logger.debug("Calculate distance matrix")
     distance = scipy.spatial.distance.squareform(self.distance_matrix())
@@ -80,12 +79,21 @@ class ClusterAlgorithm:
 
     ts = time.clock()
     logger.debug("Assign new clusters")
-    fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, self.epsilon)
+
+    # If there is the max distance given in the config cluster first with distance criterion
+    if self.epsilon > 0:
+      fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.epsilon, criterion='distance')
+      # If there is a maximum number of clusters in the config or the number of cluster after
+      if max(fcluster) > self.max_clusters > 0:
+        logger.info("To much clusters after distance based clustering -> use max_clusters instead.")
+        fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.max_clusters, criterion='maxclust')
+    elif self.max_clusters > 0:
+      fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.max_clusters, criterion='maxclust')
+    else:
+      raise RuntimeError("Neither max distance (epsilon) nor max number of clusters (max_clusters) given.")
 
     self.clusters = self.create_new_clusters(fcluster)
     self.eval['time']['Assign new clusters'] = time.clock() - ts
-
-    self.eval['time']['Total'] = time.clock() - tstart
 
     return self.clusters, self.remaining
 

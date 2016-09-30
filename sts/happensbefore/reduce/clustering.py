@@ -40,8 +40,16 @@ class Clustering:
 
     # Clustering
     logger.debug("Start Clustering")
-    self.clusters, self.remaining = algorithm.run(self.clusters)
-    self.write_clusters_info()
+    # Check if there are more than two clusters
+    if len(self.clusters) <= 1:
+      logger.info("Only one cluster left after isomorphic initialization.")
+      self.eval['time']['Total'] = time.clock() - tstart
+      algorithm.eval['time']['Calculate distance matrix'] = 0.0
+      algorithm.eval['time']['Calculate clustering'] = 0.0
+      algorithm.eval['time']['Assign new clusters'] = 0.0
+    else:
+      self.clusters, self.remaining = algorithm.run(self.clusters)
+      self.write_clusters_info()
 
     # Merge Eval dicts so that only this one is needed later
     self.eval['score'] = algorithm.eval['score']
@@ -76,7 +84,12 @@ class Clustering:
         if len(group[0]) > len(group[0]):
           break
         if nx.faster_could_be_isomorphic(group[0], curr_graph):
-          if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
+          if len(list(nx.simple_cycles(group[0]))):
+            raise RuntimeError("Cycles in group (%s, %s)" % (group[0].graph['index'], curr_graph.graph['index']))
+          elif len(list(nx.simple_cycles(curr_graph))):
+            raise RuntimeError("Cycles in curr_graph (%s, %s)" % (group[0].graph['index'], curr_graph.graph['index']))
+
+          elif nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
             group.append(curr_graph)
             added = True
             break

@@ -49,6 +49,10 @@ class Reduce:
     # Store copy of hb_graph and the harmful races
     self.hb_graph = hb_graph.g.copy()
     self.races = hb_graph.race_detector.races_harmful
+    # Exit if there are no races in the trace
+    if len(self.races) == 0:
+      self.logger.info("There are no races in the trace.")
+      sys.exit(0)
 
     # Parse config
     config = ConfigParser.RawConfigParser()

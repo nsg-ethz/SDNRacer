@@ -55,30 +55,58 @@ class Preprocessor:
     return
 
   def remove_proactive(self):
-    """ Removes the initial Proactive barrier_request after the removal of all flow rules in all switches at startup.
-    If there are other root events, no nodes are removed."""
-    # All root nodes
-    roots = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
+    """ Removes the initial Proactive barrier_request after the removal of all flow rules in all switches at startup."""
+    num_nodes = sys.maxint
 
-    nodes = []
-    for root in roots:
-      skip = False
-      # Case 1 Floodlight: Init consist of Barrier - RemoveFlows - Barrier
-      # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
-      candidates = []
-      if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
-          self.hb_graph.node[root]['event'].msg_type == 18):
-        candidates.append(root)
-        suc = self.hb_graph.successors(root)
+    removed = 0
 
-        # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
-        if (len(suc) == 1 and
-            isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
-            self.hb_graph.node[suc[0]]['event'].msg_type == 14):
-          candidates.append(suc[0])
-          suc = self.hb_graph.successors(suc[0])
+    while num_nodes != len(self.hb_graph.nodes()):
+      num_nodes = len(self.hb_graph.nodes())
+      # All root nodes
+      roots = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
 
-          # Third event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+      nodes = []
+      for root in roots:
+        skip = False
+        # Case 1 Floodlight: Init consist of Barrier - RemoveFlows - Barrier
+        # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+        candidates = []
+        if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
+            self.hb_graph.node[root]['event'].msg_type == 18):
+          candidates.append(root)
+          suc = self.hb_graph.successors(root)
+
+          # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
+          if (len(suc) == 1 and
+              isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
+              self.hb_graph.node[suc[0]]['event'].msg_type == 14):
+            candidates.append(suc[0])
+            suc = self.hb_graph.successors(suc[0])
+
+            # Third event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+            if (len(suc) == 1 and
+                isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
+                self.hb_graph.node[suc[0]]['event'].msg_type == 18):
+              candidates.append(suc[0])
+              for node in candidates:
+                if node in self.race_ids:
+                  skip = True
+
+              if skip:
+                continue
+              nodes.extend(candidates)
+              continue
+
+        candidates = []
+
+        # Case 2 POX: Init consist of RemoveFlows - Barrier, sometimes repeatedly
+        # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
+        if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
+            self.hb_graph.node[root]['event'].msg_type == 14):
+          candidates.append(root)
+          suc = self.hb_graph.successors(root)
+
+          # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
           if (len(suc) == 1 and
               isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
               self.hb_graph.node[suc[0]]['event'].msg_type == 18):
@@ -88,33 +116,13 @@ class Preprocessor:
                 skip = True
 
             if skip:
-              continue
+              break
             nodes.extend(candidates)
-            continue
 
-      candidates = []
+      self.hb_graph.remove_nodes_from(nodes)
+      removed += len(nodes)
 
-      # Case 2 POX: Init consist of RemoveFlows - Barrier
-      # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
-      if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
-              self.hb_graph.node[root]['event'].msg_type == 14):
-        candidates.append(root)
-        suc = self.hb_graph.successors(root)
-
-        # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
-        if (len(suc) == 1 and
-              isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and
-                self.hb_graph.node[suc[0]]['event'].msg_type == 18):
-          candidates.append(suc[0])
-          for node in candidates:
-            if node in self.race_ids:
-              skip = True
-
-          if skip:
-            continue
-          nodes.extend(candidates)
-
-    self.hb_graph.remove_nodes_from(nodes)
+    logger.debug("Removed %s proactive events" % removed)
 
     return
 

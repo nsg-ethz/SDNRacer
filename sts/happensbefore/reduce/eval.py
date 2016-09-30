@@ -22,7 +22,9 @@ class Evaluation:
     # Check if eval file exists
     assert os.path.exists(eval_folder), 'Folder %s does not exist' % eval_folder
 
-    self.eval_folder = eval_folder
+    print eval_folder
+    self.eval_folder = os.path.abspath(eval_folder)
+    print self.eval_folder
 
     # Fetch data and store them based on controller and topology
     self.eval_dicts = {}
@@ -60,7 +62,7 @@ class Evaluation:
         self.num_sim += len(self.eval_dicts[controller][topology].keys())
 
     # Prepare directory for results
-    self.evaldir = os.path.join(os.path.dirname(self.eval_folder), 'evaluation')
+    self.evaldir = os.path.join(self.eval_folder, 'evaluation')
     if os.path.exists(self.evaldir):
       shutil.rmtree(self.evaldir)
     os.makedirs(self.evaldir)
@@ -186,8 +188,11 @@ class Evaluation:
     plt.tight_layout()
     fig.savefig(os.path.join(self.evaldir, 'timing_information.pdf'))
 
-    # Write some other infos to the eval file
+    # Write eval file
+    print "Write eval.txt file"
+    print "Path %s" % self.file
     with open(self.file, 'w') as f:
+      print "\t Clustering info"
       title = "| %26s | %25s | %5s | %8s | %11s | %10s [s] |\n" % \
               ('Controller', 'Topology', 'Steps', 'NumRaces', 'NumClusters', 'TotTime')
       sep_line = "-" * len(title) + "\n"
@@ -207,6 +212,7 @@ class Evaluation:
       f.write(sep_line)
 
       # Clustering infromation for meeting
+      print "\t Timing info"
       f.write("\n\n\n")
       for controller in sorted(self.eval_dicts.keys()):
         for topology in sorted(self.eval_dicts[controller].keys()):
@@ -239,8 +245,9 @@ class Evaluation:
             controller_str += ("%s " % s.capitalize())
           f.write("%s%s\n" % (controller_str, topology))
           f.write("Steps\t# Events\t# Races\tTotal Time\tHb_Graph\tPreprocess hb_graph\t"
-                  "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tDBScan\n")
+                  "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tClustering\n")
           for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
+            print "\t\t %s, %s, %s" % (controller, topology, steps)
             line = "%s\t" % str(steps)  # Number of steps
             line += "%s\t" % data['info']['Number of events']
             line += "%s\t" % data['info']['Number of graphs']
@@ -248,15 +255,16 @@ class Evaluation:
             line += "%.3f s\t" % data['time']['hb_graph']
             line += "%.3f s\t" % data['preprocessor']['time']['Total']
             line += "%.3f s\t" % data['subgraph']['time']['Total']
-            line += "%.3f s\t" % data['clustering']['time']['Initialize cluster']
-            line += "%.3f s\t" % data['clustering']['time']['Calculate distance matrix']
-            line += "%.3f s\t" % data['clustering']['time']['Run DBScan Algorithm']
+            try:
+              line += "%.3f s\t" % data['clustering']['time']['Initialize cluster']
+              line += "%.3f s\t" % data['clustering']['time']['Calculate distance matrix']
+              line += "%.3f s\t" % \
+                      (data['clustering']['time']['Calculate clustering'] +
+                       data['clustering']['time']['Assign new clusters'])
+            except KeyError:
+              line += "-\t-\t-\t"
             line += "\n"
             f.write(line)
-
-
-
-
 
 if __name__ == '__main__':
   # First call hb_graph.py and provide the same parameters

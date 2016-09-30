@@ -123,11 +123,11 @@ class Cluster:
 
   def __str__(self):
     s = 'Cluster %s\n' % self.id
-    s += "\t%30s - %s\n" % ("Number of graphs", len(self.graphs))
-    s += "\tProperties:\n"
+    s += "\t%-20s: %s\n" % ("Number of graphs", len(self.graphs))
+    s += "\t%-20s:\n" % "Properties"
     for prop, value in self.properties.iteritems():
-      s += "\t\t%30s - %s\n" % (prop, value)
-    s += "\t%30s - %s\n" % ("Common writes", self.common_writes)
+      s += "\t\t%-20s: %s\n" % (prop, value)
+    s += "\t%-20s: %s\n" % ("Common writes", self.common_writes)
 
     return s
 
