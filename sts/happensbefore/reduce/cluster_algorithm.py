@@ -102,6 +102,7 @@ class ClusterAlgorithm:
     Assigns the current clusters to the new clusters returnd by the fcluster function.
     """
     new_clusters = [None] * max(fclusters)
+    ind_list = [[]] * max(fclusters)
 
     # Generate all new clusters and assign the graphs of the current clusters to them
     for ind, clu in enumerate(fclusters):
