@@ -112,9 +112,20 @@ def iso_components(graph1, graph2):
   components = list(nx.weakly_connected_components(graph1))
 
   if len(components) == 2:
-    # Only interesting if the graph has two separate branches
-    g1 = nx.DiGraph(graph1.subgraph(components[0]))
-    g2 = nx.DiGraph(graph1.subgraph(components[1]))
+    try:
+      # Only interesting if the graph has two separate branches
+
+      g2 = nx.DiGraph(graph1.subgraph(components[1]))
+      g1 = nx.DiGraph(graph1.subgraph(components[0]))
+    except nx.NetworkXError:
+      try:
+        logger.debug("Error in graph2.subgraph. Try subgraph generation again")
+        g2 = nx.DiGraph(graph1.subgraph(components[1]))
+        g1 = nx.DiGraph(graph1.subgraph(components[0]))
+      except nx.NetworkxError:
+        logger.error("Faild the second time. Exit")
+        raise
+      logger.debug("Worked the second time...")
 
     # Only consider "write branches"
     if not has_write_event(g1):
@@ -130,8 +141,19 @@ def iso_components(graph1, graph2):
 
   if len(components) == 2:
     # Only interesting if the graph has two separate branches
-    r1 = nx.DiGraph(graph2.subgraph(components[0]))
-    r2 = nx.DiGraph(graph2.subgraph(components[1]))
+    try:
+      r2 = nx.DiGraph(graph2.subgraph(components[1]))
+      r1 = nx.DiGraph(graph2.subgraph(components[0]))
+
+    except nx.NetworkXError:
+      try:
+        logger.debug("Error in graph2.subgraph. Try subgraph generation again")
+        r2 = nx.DiGraph(graph2.subgraph(components[1]))
+        r1 = nx.DiGraph(graph2.subgraph(components[0]))
+      except nx.NetworkxError:
+        logger.error("Faild the second time. Exit")
+        raise
+      logger.debug("Worked the second time...")
 
     # Only consider "write branches"
     if not has_write_event(r1):

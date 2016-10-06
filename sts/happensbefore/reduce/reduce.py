@@ -22,7 +22,7 @@ class Reduce:
     print "########################################################################"
     print "#############################  CLUSTERING  #############################"
     print "########################################################################"
-    print ""
+    print "Trace File: %s" % trace_file
 
     # Create separate results directory
     self.resultdir = os.path.join(os.path.dirname(trace_file), 'reduce')
@@ -145,7 +145,7 @@ class Reduce:
 
     if self.eval['clustering']['iso component total']:
       s += "\t%30s - %s of %s (%f %%)\n" % \
-           ("Iso init timeouts", self.eval['clustering']['iso component timeout'],
+           ("Iso component timeouts", self.eval['clustering']['iso component timeout'],
             self.eval['clustering']['iso component total'],
             float(self.eval['clustering']['iso component timeout']) /
             float(self.eval['clustering']['iso component total']))
