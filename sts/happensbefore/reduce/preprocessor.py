@@ -116,7 +116,7 @@ class Preprocessor:
                 skip = True
 
             if skip:
-              break
+              continue
             nodes.extend(candidates)
 
       self.hb_graph.remove_nodes_from(nodes)

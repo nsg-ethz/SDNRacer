@@ -28,9 +28,9 @@ controllers = [ControllerConfig(start_cmd, cwd="/home/roman/sdnracer/pox/", port
 ############
 # "Single" #
 # ############
-num = 2
-topology_class = StarTopology #
-topology_params = "num_hosts=%d" % num
+# num = 2
+# topology_class = StarTopology #
+# topology_params = "num_hosts=%d" % num
 
 #############
 # "Single4" #
@@ -49,9 +49,9 @@ topology_params = "num_hosts=%d" % num
 ############
 # "BinTree" #
 ############
-#num = 2
-#topology_class = BinaryLeafTreeTopology
-#topology_params = "num_levels=%d" % num
+num = 2
+topology_class = BinaryLeafTreeTopology
+topology_params = "num_levels=%d" % num
 
 # Increase this value to get longer traces
 steps = 400

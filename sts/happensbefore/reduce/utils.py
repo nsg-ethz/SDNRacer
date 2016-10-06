@@ -2,6 +2,7 @@
 import sys
 import time
 import logging
+import signal
 import networkx as nx
 from networkx.algorithms import isomorphism
 
@@ -141,18 +142,27 @@ def iso_components(graph1, graph2):
     r1 = None
     r2 = None
 
-  # Find isomorphic parts
-  iso = False
-  if g1 and r1 and nx.is_isomorphic(g1, r1, node_match=node_match, edge_match=edge_match):
-    iso = True
-  elif g1 and r2 and nx.is_isomorphic(g1, r2, node_match=node_match, edge_match=edge_match):
-    iso = True
-  elif g2 and r1 and nx.is_isomorphic(g2, r1, node_match=node_match, edge_match=edge_match):
-    iso = True
-  elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=node_match, edge_match=edge_match):
-    iso = True
-  elif nx.is_isomorphic(graph1, graph2, node_match=node_match, edge_match=edge_match):
-    iso = True
+  # Find isomorphic parts (with timeout
+  try:
+    iso = False
+    if g1 and r1 and nx.is_isomorphic(g1, r1, node_match=node_match, edge_match=edge_match):
+      iso = True
+    elif g1 and r2 and nx.is_isomorphic(g1, r2, node_match=node_match, edge_match=edge_match):
+      iso = True
+    elif g2 and r1 and nx.is_isomorphic(g2, r1, node_match=node_match, edge_match=edge_match):
+      iso = True
+    elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=node_match, edge_match=edge_match):
+      iso = True
+    elif nx.is_isomorphic(graph1, graph2, node_match=node_match, edge_match=edge_match):
+      iso = True
+  except nx.NetworkXError:
+    logger.error("NetworkXError in utils.iso_components.")
+    logger.error("Variables:")
+    logger.error("\t%s" % g1)
+    logger.error("\t%s" % g2)
+    logger.error("\t%s" % r1)
+    logger.error("\t%s" % r2)
+    raise
 
   return iso
 
@@ -165,3 +175,23 @@ def node_match(n1, n2):
 def edge_match(e1, e2):
   # it returns True if two edges have the same relation
   return e1['rel'] == e2['rel']
+
+
+class TimeoutError(Exception):
+  pass
+
+
+class timeout:
+  def __init__(self, seconds=1, error_message='Timeout'):
+    self.seconds = seconds
+    self.error_message = error_message
+
+  def handle_timeout(self, signum, frame):
+    raise TimeoutError(self.error_message)
+
+  def __enter__(self):
+    signal.signal(signal.SIGALRM, self.handle_timeout)
+    signal.alarm(self.seconds)
+
+  def __exit__(self, type, value, traceback):
+    signal.alarm(0)

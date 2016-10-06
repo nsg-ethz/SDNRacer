@@ -22,8 +22,8 @@ class Clustering:
     self.clusters = []
     self.remaining = []
     self.eval = {'time': {},
-                 'info': {}}
-
+                 'info': {},
+                 'iso init total': 0}
 
     self.t_is_is = 0
     self.t_matcher = 0
@@ -55,6 +55,8 @@ class Clustering:
     self.eval['score'] = algorithm.eval['score']
     for k, v in algorithm.eval['time'].iteritems():
       self.eval['time'][k] = v
+    self.eval['iso component timeout'] = algorithm.eval['iso component timeout']
+    self.eval['iso component total'] = algorithm.eval['iso component total']
 
     self.eval['time']['Total'] = time.clock() - tstart
 
@@ -73,6 +75,7 @@ class Clustering:
     # Put all isomorphic graphs in groups
     stack = self.graphs[:]  # Copy of graph list to process
     groups = []  # List groups of graphs which are later used to create the clusters
+    groups_timeout = []
 
     for ind, curr_graph in enumerate(self.graphs):
       # logger.debug("Process graph %5d (%5d of %5d)" % (curr_graph.graph['index'], ind, len(self.graphs)))
@@ -84,15 +87,21 @@ class Clustering:
         if len(group[0]) > len(group[0]):
           break
         if nx.faster_could_be_isomorphic(group[0], curr_graph):
-          if len(list(nx.simple_cycles(group[0]))):
-            raise RuntimeError("Cycles in group (%s, %s)" % (group[0].graph['index'], curr_graph.graph['index']))
-          elif len(list(nx.simple_cycles(curr_graph))):
-            raise RuntimeError("Cycles in curr_graph (%s, %s)" % (group[0].graph['index'], curr_graph.graph['index']))
 
-          elif nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
-            group.append(curr_graph)
+          # Check isomorphism with timeout
+          try:
+            with utils.timeout(2):
+              if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
+                group.append(curr_graph)
+                added = True
+                break
+          except utils.TimeoutError:
+            groups_timeout.append([curr_graph])
             added = True
+            logger.debug("Timeout in isomorphic check. Len graphs: %d, %d" % (len(group[0]), len(curr_graph)))
             break
+          finally:
+            self.eval['iso init total'] += 1
 
       # if not -> prepare new cluster
       if not added:
@@ -107,10 +116,14 @@ class Clustering:
     for group in groups:
       self.clusters.append(cluster.Cluster(group))
 
+    for graph in groups_timeout:
+      self.clusters.append(cluster.Cluster(graph))
+
     logger.debug("Number of clusters after iso: %d" % len(self.clusters))
 
     self.eval['info']['Number of graphs'] = len(self.graphs)
     self.eval['info']['Number of clusters after iso'] = len(self.clusters)
+    self.eval['iso init timeout'] = len(groups_timeout)
 
     self.eval['time']['Initialize cluster'] = time.clock() - tstart
     return
@@ -147,7 +160,9 @@ class Clustering:
         os.makedirs(export_path)
       iso_exported = []
       for graph in cluster.graphs:
-        if graph.graph['iso_cluster'] not in iso_exported:
+        if 'iso_cluster' not in graph.graph:
+          nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'iso_timeout_%03d.dot' % graph.graph['index']))
+        elif 'iso_cluster' in graph.graph and graph.graph['iso_cluster'] not in iso_exported:
           nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'iso_%03d.dot' % graph.graph['iso_cluster']))
           iso_exported.append(graph.graph['iso_cluster'])
         nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))

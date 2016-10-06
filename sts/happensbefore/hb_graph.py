@@ -1438,23 +1438,25 @@ class Main(object):
       t8 = time.time()
 
       if not self.no_dot_files:
-        self.graph.store_traces(self.results_dir, print_packets=True, subgraphs=packet_traces)
+        # (RM) Prevent all exports except hb.dot
+        # self.graph.store_traces(self.results_dir, print_packets=True, subgraphs=packet_traces)
         print "Saving HB graph to:", self.output_filename
         self.graph.store_graph(self.output_filename, self.print_pkt)
-     
-        # Print traces
-        for trace, races in packet_races:
-          self.graph.print_racing_packet_trace(trace, races, label='incoherent', show_covered=False)
-        for trace, races, _ in inconsistent_packet_traces:
-          self.graph.print_racing_packet_trace(trace, races, label='incoherent_remaining')
-        for trace, races, _ in inconsistent_packet_traces_covered:
-          self.graph.print_racing_packet_trace(trace, races, label='covered')
-        for trace, races, _ in inconsistent_packet_entry_version:
-          self.graph.print_racing_packet_trace(trace, races, label='entry')
-        for trace, races, _ in summarized:
-          #self.graph.print_racing_packet_trace(trace, races, label='summarized')
-          pass
-        self.graph.save_races_graph(self.print_pkt)
+
+        # (RM) Prevent all exports except hb.dot
+        # # Print traces
+        # for trace, races in packet_races:
+        #   self.graph.print_racing_packet_trace(trace, races, label='incoherent', show_covered=False)
+        # for trace, races, _ in inconsistent_packet_traces:
+        #   self.graph.print_racing_packet_trace(trace, races, label='incoherent_remaining')
+        # for trace, races, _ in inconsistent_packet_traces_covered:
+        #   self.graph.print_racing_packet_trace(trace, races, label='covered')
+        # for trace, races, _ in inconsistent_packet_entry_version:
+        #   self.graph.print_racing_packet_trace(trace, races, label='entry')
+        # for trace, races, _ in summarized:
+        #   #self.graph.print_racing_packet_trace(trace, races, label='summarized')
+        #   pass
+        # self.graph.save_races_graph(self.print_pkt)
   
   #     self.graph.print_versions(versions)
   #     self.graph.print_covered_races()
@@ -1498,7 +1500,8 @@ class Main(object):
           rvg = self.graph.racing_versions_graph(v1, racing_versions_tuples_dict[(v1, v2)][0], v2, racing_versions_tuples_dict[(v1, v2)][1])
           rvg_path = os.path.join(self.results_dir, 'isolation_violation_%d.dot' % counter)
           print "Saving update isolation violation graph to %s" % rvg_path
-          write_dot(rvg, rvg_path)
+          # (RM) only export hb.dot
+          # write_dot(rvg, rvg_path)
         if hasattr(v1, 'eid'):
           pv1 = "React to event %s, %s" %  (v1.eid , getattr(v1, 'msg_type_str', ''))
         else:

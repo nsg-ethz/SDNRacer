@@ -119,12 +119,6 @@ class Reduce:
       # replace the race from the dictionary with just the event ids (race object not serializable)
       graph.graph['race'] = (graph.graph['race'].i_event.eid, graph.graph['race'].i_event.eid)
       self.eval['graphs'].append(graph.graph)
-      # self.eval['graphs'].append({'index': graph.graph['index'],
-      #                             'single': True if len(graph.graph['roots']) == 1 else False,
-      #                             'return': True if len(graph.graph['hosthandles']) == 1 else False,
-      #                             'pingpong': True if graph.graph['pingpong'] else False,
-      #                             'write_ids': graph.graph['write_ids'],
-      #                             'iso_cluster': graph.graph['iso_cluster']})
 
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
       json.dump(self.eval, outfile)
@@ -132,48 +126,63 @@ class Reduce:
     # Export clusters
     self.clustering.export_clusters()
 
-    # Generate Info file
-    with open(os.path.join(self.resultdir, 'info.txt'), 'w') as outfile:
-      # General Information
-      outfile.write("General Information\n")
-      outfile.write("\t%30s - %s\n" % ("Number of events", self.eval['info']['Number of events']))
-      outfile.write("\t%30s - %s\n" % ("Number of races", self.eval['info']['Number of graphs']))
-      outfile.write("\t%30s - %s\n" % ("Initialized clusters (iso)", self.eval['clustering']['info']['Number of clusters after iso']))
-      outfile.write("\t%30s - %s\n" % ("Final number of clusters", self.eval['info']['Number of clusters']))
+    # Generate Info String
+    # General Information
+    s = ''
+    s += "General Information\n"
+    s += "\t%30s - %s\n" % ("Number of events", self.eval['info']['Number of events'])
+    s += "\t%30s - %s\n" % ("Number of races", self.eval['info']['Number of graphs'])
+    s += "\t%30s - %s\n" % ("Initialized clusters (iso)", self.eval['clustering']['info']['Number of clusters after iso'])
+    s += "\t%30s - %s\n" % ("Final number of clusters", self.eval['info']['Number of clusters'])
 
-      # Cluster information
-      for cluster in self.clustering.clusters:
-        outfile.write("\n%s" % cluster)
+    if self.eval['clustering']['iso init total']:
+      s += "\t%30s - %s of %s (%f %%)\n" % \
+           ("Iso init timeouts", self.eval['clustering']['iso init timeout'],
+            self.eval['clustering']['iso init total'],
+            float(self.eval['clustering']['iso init timeout']) / float(self.eval['clustering']['iso init total']))
+    else:
+      s += "\t%30s - %s\n" % ("Iso init timeouts", "N/A")
 
-    # summary
-    self.logger.info("SUMMARY:")
-    for k, v in self.eval['info'].iteritems():
-      self.logger.info("%30s - %5s" % (k, v))
+    if self.eval['clustering']['iso component total']:
+      s += "\t%30s - %s of %s (%f %%)\n" % \
+           ("Iso init timeouts", self.eval['clustering']['iso component timeout'],
+            self.eval['clustering']['iso component total'],
+            float(self.eval['clustering']['iso component timeout']) /
+            float(self.eval['clustering']['iso component total']))
+    else:
+      s += "\t%30s - %s\n" % ("Iso component timeouts", "N/A")
 
-    # Cluster summary
-    self.logger.info("Cluster Summary:")
+    # Cluster information
     for cluster in self.clustering.clusters:
-      self.logger.info("\n%s" % cluster)
+      s += "\n%s" % cluster
 
+    # Write time information
     # summary timing
-    self.logger.info("Timing:")
+    s += "Timing:\n"
     for k, v in self.eval['time'].iteritems():
-      self.logger.info("%30s - %10.3f" % (k, v))
+      s += "%30s - %10.3f\n" % (k, v)
 
     # summary preprocessor
-    self.logger.debug("Timing preprocessor:")
+    s += "Timing preprocessor:\n"
     for k, v in self.eval['preprocessor']['time'].iteritems():
-      self.logger.debug("%30s - %10.3f" % (k, v))
+      s += "%30s - %10.3f\n" % (k, v)
 
     # summary subgraph
-    self.logger.debug("Timing subgraph:")
+    s += "Timing subgraph:\n"
     for k, v in self.eval['subgraph']['time'].iteritems():
-      self.logger.debug("%30s - %10.3f" % (k, v))
+      s += "%30s - %10.3f\n" % (k, v)
 
     # summary clustering
-    self.logger.debug("Timing clustering:")
+    s += "Timing clustering:\n"
     for k, v in self.eval['clustering']['time'].iteritems():
-      self.logger.debug("%30s - %10.3f" % (k, v))
+      s += "%30s - %10.3f\n" % (k, v)
+
+    # Write info file
+    with open(os.path.join(self.resultdir, 'info.txt'), 'w') as outfile:
+      outfile.write(s)
+
+    # Print info 
+    self.logger.info("\n" + s)
 
     return
 

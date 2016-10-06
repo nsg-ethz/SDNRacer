@@ -3,6 +3,7 @@ import time
 import sys
 import numpy as np
 import scipy
+import networkx as nx
 
 import utils
 import cluster
@@ -56,7 +57,9 @@ class ClusterAlgorithm:
 
     # Dictionary for the evaluation
     self.eval = {'score': {},
-                 'time': {}}
+                 'time': {},
+                 'iso component timeout': 0,
+                 'iso component total': 0}
     for f in self.score_dict.keys():
       self.eval['score'][f] = []
 
@@ -81,16 +84,7 @@ class ClusterAlgorithm:
     logger.debug("Assign new clusters")
 
     # If there is the max distance given in the config cluster first with distance criterion
-    if self.epsilon > 0:
-      fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.epsilon, criterion='distance')
-      # If there is a maximum number of clusters in the config or the number of cluster after
-      if max(fcluster) > self.max_clusters > 0:
-        logger.info("To much clusters after distance based clustering -> use max_clusters instead.")
-        fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.max_clusters, criterion='maxclust')
-    elif self.max_clusters > 0:
-      fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.max_clusters, criterion='maxclust')
-    else:
-      raise RuntimeError("Neither max distance (epsilon) nor max number of clusters (max_clusters) given.")
+    fcluster = scipy.cluster.hierarchy.fcluster(linkage_matrix, t=self.epsilon, criterion='distance')
 
     self.clusters = self.create_new_clusters(fcluster)
     self.eval['time']['Assign new clusters'] = time.clock() - ts
@@ -102,7 +96,6 @@ class ClusterAlgorithm:
     Assigns the current clusters to the new clusters returnd by the fcluster function.
     """
     new_clusters = [None] * max(fclusters)
-    ind_list = [[]] * max(fclusters)
 
     # Generate all new clusters and assign the graphs of the current clusters to them
     for ind, clu in enumerate(fclusters):
@@ -122,9 +115,9 @@ class ClusterAlgorithm:
     """
     mat = np.zeros((len(self.clusters), len(self.clusters)))
     for ind1, g1 in enumerate(self.clusters):
-      for ind2, g2 in enumerate(self.clusters[0:(ind1 + 1)]):
-        if g1 == g2:
-          mat[ind1, ind2] = 0
+      for ind2, g2 in enumerate(self.clusters[:ind1]):
+        if ind1 == ind2:
+          continue
         mat[ind1, ind2] = self.distance(g1, g2)
         mat[ind2, ind1] = mat[ind1, ind2]
 
@@ -132,18 +125,18 @@ class ClusterAlgorithm:
 
   def distance(self, cluster1, cluster2):
     """
-    Returns the distance between two clusters.
+    Returns the distance between two clusters. Each functions returns a value between 1 and 0 to indicate which
+    percentage of the penalty score should be assigned.
     """
-    tot_score = 0
+    tot_dist = 0
 
     # Execute all scoring functions and save score for evaluation
     for f, s in self.score_dict.iteritems():
-      score = getattr(self, f)(cluster1, cluster2) * s
-      tot_score += score
-      self.eval['score'][f].append(score)
+      dist = getattr(self, f)(cluster1, cluster2) * s
+      tot_dist += dist
+      self.eval['score'][f].append(dist)
 
-    # Invert score (closeness to distance)
-    return self.max_score - tot_score
+    return tot_dist
 
   def iso_components(self, cluster1, cluster2):
     """
@@ -151,7 +144,20 @@ class ClusterAlgorithm:
     """
     assert cluster1.representative is not None, 'Representative is None'
     assert cluster2.representative is not None, 'Representative is None'
-    return 1 if utils.iso_components(cluster1.representative, cluster2.representative) else 0
+    try:
+      with utils.timeout(1):
+        iso = utils.iso_components(cluster1.representative, cluster2.representative)
+    except utils.TimeoutError:
+      iso = False
+      self.eval['iso component timeout'] += 1
+    except nx.NetworkXError:
+      logger.error("Networkx Error in cluster_algorithm.iso_components:")
+      logger.error("Input types: %s, %s" % (type(cluster1.representative), type(cluster2.representative)))
+      raise
+    finally:
+      self.eval['iso component total'] += 1
+
+    return 0 if iso else 1
 
   def common_write_event(self, cluster1, cluster2):
     """
@@ -175,26 +181,26 @@ class ClusterAlgorithm:
           # Cont each graph only once! -> break
           break
 
-    return common / len(graphs)
+    return (len(graphs) - common) / len(graphs)
 
   def pingpong(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs which contain a controller-switch-pingpong"""
-    return 1 - abs(cluster1.properties['pingpong'] - cluster2.properties['pingpong'])
+    return abs(cluster1.properties['pingpong'] - cluster2.properties['pingpong'])
 
   def single_send(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs origin from a single event. """
-    return 1 - abs(cluster1.properties['single'] - cluster2.properties['single'])
+    return abs(cluster1.properties['single'] - cluster2.properties['single'])
 
   def return_path(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs containing a race on the return path."""
-    return 1 - abs(cluster1.properties['return'] - cluster2.properties['return'])
+    return abs(cluster1.properties['return'] - cluster2.properties['return'])
 
   def flow_expiry(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs originate from AsyncFlowExpiry events."""
-    return 1 - abs(cluster1.properties['flowexpiry'] - cluster2.properties['flowexpiry'])
+    return abs(cluster1.properties['flowexpiry'] - cluster2.properties['flowexpiry'])
 
   def multi_send(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs origin from more than two events."""
-    return 1 - abs(cluster1.properties['multi'] - cluster2.properties['multi'])
+    return abs(cluster1.properties['multi'] - cluster2.properties['multi'])
 
 
