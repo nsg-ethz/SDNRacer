@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import logging
+import collections
 import networkx as nx
 
 import utils
@@ -61,7 +62,7 @@ class Subgraph:
       subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
       subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
 
-      nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
+      # nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
 
       # Check if the graph is loop free
       abort = False
@@ -69,13 +70,6 @@ class Subgraph:
       if cycles:
         abort = True
         logger.error("Cycles found in graph %d (Size: %d)" % (ind, len(subg.nodes())))
-        for i, cycle in enumerate(cycles):
-          logger.debug("Cycle %d: %s" % (i, cycle))
-          for node in cycle:
-            event = subg.node[node]['event']
-            logger.debug("Event %d" % node)
-            if hasattr(event, 'packet'):
-              logger.debug("Packet: %s" % event.packet)
 
       else:
         # Verify that the only leaf-nodes are the race events
@@ -141,8 +135,29 @@ class Subgraph:
       # Controller-Switch-Pingpong (Indicates if graph contains controller switch pingpong)
       g.graph['pingpong'] = utils.contains_pingpong(g)
 
-    self.eval['time']['Get subgraph attributes'] = time.clock() - tstart
+      # Check if there is flooding in the graph
+      def pkt_to_str(p):
+        return "%s%s%s%s" % (p.src, p.dst, p.payload_len, p.type)
 
+      flooding = False
+      # Get root hostsend pids:
+      pkt_out = [pkt_to_str(g.node[e]['event'].packet) for e in roots if isinstance(g.node[e]['event'], hb_events.HbHostSend)]
+      hh_packets = {}
+      for e_id in hosthandles:
+        e = g.node[e_id]['event']
+        pkt_str = pkt_to_str(e.packet)
+        if pkt_str not in hh_packets:
+          hh_packets[pkt_str] = []
+        hh_packets[pkt_str].append(e.hid)
+
+      for k, v in hh_packets.iteritems():
+        if len(v) > 1 and k in pkt_out:
+          flooding = True
+          break
+
+      g.graph['flood'] = flooding
+
+    self.eval['time']['Get subgraph attributes'] = time.clock() - tstart
     return
 
 

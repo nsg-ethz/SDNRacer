@@ -57,14 +57,12 @@ class Preprocessor:
   def remove_proactive(self):
     """ Removes the initial Proactive barrier_request after the removal of all flow rules in all switches at startup."""
     num_nodes = sys.maxint
-
     removed = 0
 
     while num_nodes != len(self.hb_graph.nodes()):
       num_nodes = len(self.hb_graph.nodes())
       # All root nodes
       roots = [x for x in self.hb_graph.nodes() if not self.hb_graph.predecessors(x)]
-
       nodes = []
       for root in roots:
         skip = False
@@ -105,7 +103,6 @@ class Preprocessor:
             self.hb_graph.node[root]['event'].msg_type == 14):
           candidates.append(root)
           suc = self.hb_graph.successors(root)
-
           # Second event has to be HbMessageHandle with MsgType OFPT_FLOW_MOD
           if (len(suc) == 1 and
               isinstance(self.hb_graph.node[suc[0]]['event'], hb_events.HbMessageHandle) and

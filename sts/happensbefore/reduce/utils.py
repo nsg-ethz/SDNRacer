@@ -98,7 +98,9 @@ def contains_pingpong(graph):
     # Check if the message origins from the same switch
     e1 = (key for key, value in match.items() if value == 1).next()
     e2 = (key for key, value in match.items() if value == 5).next()
-    if graph.node[e1]['event'].dpid == graph.node[e2]['event'].dpid:
+    e3 = (key for key, value in match.items() if value == 4).next()
+    if (graph.node[e1]['event'].dpid == graph.node[e2]['event'].dpid and
+        graph.node[e3]['event'].msg_type == 13):
       return True
 
   return False
@@ -164,29 +166,27 @@ def iso_components(graph1, graph2):
     r1 = None
     r2 = None
 
-  # Find isomorphic parts (with timeout
+  # Find isomorphic parts (with timeout)
   try:
+    with timeout(1):
+      iso = False
+      t_out = False
+      if g1 and r1 and nx.is_isomorphic(g1, r1, node_match=node_match, edge_match=edge_match):
+        iso = True
+      elif g1 and r2 and nx.is_isomorphic(g1, r2, node_match=node_match, edge_match=edge_match):
+        iso = True
+      elif g2 and r1 and nx.is_isomorphic(g2, r1, node_match=node_match, edge_match=edge_match):
+        iso = True
+      elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=node_match, edge_match=edge_match):
+        iso = True
+      elif nx.is_isomorphic(graph1, graph2, node_match=node_match, edge_match=edge_match):
+        iso = True
+  except TimeoutError:
+    logger.error("Timeout in iso_components.")
     iso = False
-    if g1 and r1 and nx.is_isomorphic(g1, r1, node_match=node_match, edge_match=edge_match):
-      iso = True
-    elif g1 and r2 and nx.is_isomorphic(g1, r2, node_match=node_match, edge_match=edge_match):
-      iso = True
-    elif g2 and r1 and nx.is_isomorphic(g2, r1, node_match=node_match, edge_match=edge_match):
-      iso = True
-    elif g2 and r2 and nx.is_isomorphic(g2, r2, node_match=node_match, edge_match=edge_match):
-      iso = True
-    elif nx.is_isomorphic(graph1, graph2, node_match=node_match, edge_match=edge_match):
-      iso = True
-  except nx.NetworkXError:
-    logger.error("NetworkXError in utils.iso_components.")
-    logger.error("Variables:")
-    logger.error("\t%s" % g1)
-    logger.error("\t%s" % g2)
-    logger.error("\t%s" % r1)
-    logger.error("\t%s" % r2)
-    raise
+    t_out = True
 
-  return iso
+  return iso, t_out
 
 
 def node_match(n1, n2):
@@ -217,3 +217,5 @@ class timeout:
 
   def __exit__(self, type, value, traceback):
     signal.alarm(0)
+
+

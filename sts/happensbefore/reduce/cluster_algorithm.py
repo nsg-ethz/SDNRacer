@@ -26,6 +26,8 @@ class ClusterAlgorithm:
                score_return_path=1,
                score_flow_expiry=1,
                score_multi_send=1,
+               score_flooding=1,
+               score_len_roots=1,
                linkage='complete',
                epsilon=1):
     self.resultdir = resultdir
@@ -47,6 +49,10 @@ class ClusterAlgorithm:
       self.score_dict['flow_expiry'] = float(score_flow_expiry)
     if float(score_return_path) != 0:
       self.score_dict['multi_send'] = float(score_multi_send)
+    if float(score_flooding) != 0:
+      self.score_dict['flooding'] = float(score_flooding)
+    if float(score_len_roots) != 0:
+      self.score_dict['len_roots'] = float(score_len_roots)
 
     # Maximum score
     self.max_score = sum(self.score_dict.values())
@@ -144,18 +150,12 @@ class ClusterAlgorithm:
     """
     assert cluster1.representative is not None, 'Representative is None'
     assert cluster2.representative is not None, 'Representative is None'
-    try:
-      with utils.timeout(1):
-        iso = utils.iso_components(cluster1.representative, cluster2.representative)
-    except utils.TimeoutError:
-      iso = False
+
+    iso, t_out = utils.iso_components(cluster1.representative, cluster2.representative)
+    if t_out:
       self.eval['iso component timeout'] += 1
-    except nx.NetworkXError:
-      logger.error("Networkx Error in cluster_algorithm.iso_components:")
-      logger.error("Input types: %s, %s" % (type(cluster1.representative), type(cluster2.representative)))
-      raise
-    finally:
-      self.eval['iso component total'] += 1
+
+    self.eval['iso component total'] += 1
 
     return 0 if iso else 1
 
@@ -203,4 +203,14 @@ class ClusterAlgorithm:
     """ Score based on similarity in terms of percentage of graphs origin from more than two events."""
     return abs(cluster1.properties['multi'] - cluster2.properties['multi'])
 
+  def flooding(self, cluster1, cluster2):
+    """Score based on similarity in terms of percentage of graphs containing flooding."""
+    return abs(cluster1.properties['flood'] - cluster2.properties['flood'])
+
+  def len_roots(self, cluster1, cluster2):
+    """Score based on number of root events in the clusters"""
+    if cluster1.properties['len_roots'] == cluster2.properties['len_roots']:
+      return 0
+    else:
+      return 1
 

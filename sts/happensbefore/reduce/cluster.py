@@ -19,7 +19,9 @@ class Cluster:
         'single': 0,                # Percentage of races origin from a single root event
         'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
         'flowexpiry': 0,            # Percentage of graphs origin from flowexpiry
-        'multi': 0                  # Percentage of graphs origin from more than two root events
+        'multi': 0,                  # Percentage of graphs origin from more than two root events
+        'flood': 0,
+        'len_roots': 0
     }
 
     if graphs:
@@ -67,6 +69,12 @@ class Cluster:
 
     # Multiple roots
     self.properties['multi'] = len([g for g in self.graphs if g.graph['multi']]) / float(len(self.graphs))
+
+    # Flooding
+    self.properties['flood'] = len([g for g in self.graphs if g.graph['flood']]) / float(len(self.graphs))
+
+    # Number of root events (average)
+    self.properties['len_roots'] = sum([len(g.graph['roots']) for g in self.graphs]) / float(len(self.graphs))
 
     return
 
