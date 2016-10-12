@@ -21,10 +21,11 @@ topology[0]="StarTopology"
 #topology[2]="BinaryLeafTreeTopology"
 
 # Steps
-steps[0]="200"
-steps[1]="400"
-#steps[2]="600"
-#steps[3]="800"
+#steps[0]="200"
+#steps[1]="400"
+steps[0]="600"
+steps[1]="800"
+steps[2]="1000"
 
 ############################################
 # Multiprocessing variables and functions
