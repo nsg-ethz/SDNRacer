@@ -78,19 +78,29 @@ class Evaluation:
     print "Write eval.txt file"
     print "Path %s" % self.file
     with open(self.file, 'w') as f:
+      f.write("Controller\tApp\tTopology\tSteps\tIteration\t# Events\t# Races\t# Isomorphic Clusters\t# Final Clusters\t"
+              "Cluster 0\tCluster 1\tCluster 2\tCluster 3\tTotal Time\tHb_Graph\tPreprocess hb_graph\t"
+              "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tClustering\n")
       # Clustering information
       for controller in sorted(self.eval_dicts.keys()):
+        # Separate controller and module
+        if controller.startswith('floodlight'):
+          app = controller.replace('floodlight_', '')
+          controller_str = 'Floodlight'
+        elif controller.startswith('pox_eel'):
+          app = controller.replace('pox_eel_', '')
+          controller_str = 'POX EEL'
+        else:
+          raise RuntimeError("Unknown controller string %s" % controller)
+
         for topology in sorted(self.eval_dicts[controller].keys()):
-          controller_str = ""
-          for s in controller.split("_"):
-            controller_str += ("%s " % s.capitalize())
-          f.write("%s%s\n" % (controller_str, topology))
-          f.write("Steps\tIteration\t# Events\t# Races\t# Isomorphic Clusters\t# Final Clusters\t"
-                  "Cluster 0\tCluster 1\tCluster 2\tCluster 3\tTotal Time\tHb_Graph\tPreprocess hb_graph\t"
-                  "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tClustering\n")
           for steps in sorted(self.eval_dicts[controller][topology].keys()):
             for i, data in sorted(self.eval_dicts[controller][topology][steps].iteritems()):
-              line = "%s\t" % str(steps)  # Number of steps
+              line = ""
+              line += "%s\t" % controller_str
+              line += "%s\t" % app
+              line += "%s\t" % topology
+              line += "%s\t" % str(steps)
               line += "%s\t" % str(i)  # Iteration number
               line += "%s\t" % data['info']['Number of events']
               line += "%s\t" % data['info']['Number of graphs']

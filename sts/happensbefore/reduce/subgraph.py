@@ -101,12 +101,6 @@ class Subgraph:
       roots = [x for x in g.nodes() if not g.predecessors(x)]
       g.graph['roots'] = roots
 
-      # Set if the graph origins from a single send
-      g.graph['single'] = True if len(roots) == 1 else False
-
-      # Set if the graph origins from more than two roots
-      g.graph['multi'] = True if len(roots) > 2 else False
-
       # Set if the race is with a AsyncFlowExpiry event
       flow_expiry = False
       for r in roots:
@@ -115,12 +109,11 @@ class Subgraph:
           break
       g.graph['flowexpiry'] = flow_expiry
 
-      # HostHandles (check if there are hosthandles in the graph -> return path affected)
-      hosthandles = [x for x in g.nodes() if isinstance(g.node[x]['event'], hb_events.HbHostHandle)]
-      g.graph['hosthandles'] = hosthandles
-
       # Return path affected
-      g.graph['return'] = True if len(hosthandles) > 0 else False
+      if len([x for x in g.nodes() if isinstance(g.node[x]['event'], hb_events.HbHostHandle)]) > 0:
+        g.graph['return'] = True
+      else:
+        g.graph['return'] = False
 
       # Write events (list of all race-write-events in the graph)
       write_events = []
@@ -138,9 +131,6 @@ class Subgraph:
       g.graph['pingpong'] = utils.contains_pingpong(g)
 
       # Check if there is flooding in the graph
-      def pkt_to_str(p):
-        return "%s%s%s%s" % (p.src, p.dst, p.payload_len, p.type)
-
       flooding = False
       # Get MessageHandles:
       msg_handles = [g.node[e]['event'] for e in g.nodes() if isinstance(g.node[e]['event'], hb_events.HbMessageHandle)]
@@ -159,7 +149,17 @@ class Subgraph:
 
       g.graph['flood'] = flooding
 
+      # Number of hostsends
+      g.graph['num_hostsends'] = len([x for x in roots if isinstance(g.node[x]['event'], hb_events.HbHostSend)])
+
+      # Proactive Race event
+      g.graph['num_proactive'] = 0
+      for rid in [g.graph['race'].i_event.eid, g.graph['race'].k_event.eid]:
+        if g.node[rid].get('cmd_type') == 'Proactive':
+          g.graph['num_proactive'] += 1
+
     self.eval['time']['Get subgraph attributes'] = time.clock() - tstart
+
     return
 
 

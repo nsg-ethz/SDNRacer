@@ -143,15 +143,6 @@ class Reduce:
     else:
       s += "\t%30s - %s\n" % ("Iso init timeouts", "N/A")
 
-    if self.eval['clustering']['iso component total']:
-      s += "\t%30s - %s of %s (%f %%)\n" % \
-           ("Iso component timeouts", self.eval['clustering']['iso component timeout'],
-            self.eval['clustering']['iso component total'],
-            float(self.eval['clustering']['iso component timeout']) /
-            float(self.eval['clustering']['iso component total']))
-    else:
-      s += "\t%30s - %s\n" % ("Iso component timeouts", "N/A")
-
     # Cluster information
     for cluster in self.clustering.clusters:
       s += "\n%s" % cluster

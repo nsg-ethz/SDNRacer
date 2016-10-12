@@ -55,8 +55,6 @@ class Clustering:
     self.eval['score'] = algorithm.eval['score']
     for k, v in algorithm.eval['time'].iteritems():
       self.eval['time'][k] = v
-    self.eval['iso component timeout'] = algorithm.eval['iso component timeout']
-    self.eval['iso component total'] = algorithm.eval['iso component total']
 
     self.eval['time']['Total'] = time.clock() - tstart
 

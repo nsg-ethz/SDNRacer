@@ -19,15 +19,13 @@ class ClusterAlgorithm:
   def __init__(self,
                resultdir,
                max_clusters=5,
-               score_same_write=1,
-               score_iso_components=1,
                score_contains_pingpong=1,
-               score_single_send=1,
                score_return_path=1,
                score_flow_expiry=1,
-               score_multi_send=1,
                score_flooding=1,
-               score_len_roots=1,
+               score_num_roots=1,
+               score_num_hostsends=1,
+               score_num_proactive_race=1,
                linkage='complete',
                epsilon=1):
     self.resultdir = resultdir
@@ -35,24 +33,20 @@ class ClusterAlgorithm:
 
     # Create score dictionary for all scores != 0. Form: 'function_name': score
     self.score_dict = {}
-    if float(score_iso_components) != 0:
-      self.score_dict['iso_components'] = float(score_iso_components)
-    if float(score_same_write) != 0:
-      self.score_dict['common_write_event'] = float(score_same_write)
     if float(score_contains_pingpong) != 0:
       self.score_dict['pingpong'] = float(score_contains_pingpong)
-    if float(score_single_send) != 0:
-      self.score_dict['single_send'] = float(score_single_send)
     if float(score_return_path) != 0:
       self.score_dict['return_path'] = float(score_return_path)
     if float(score_return_path) != 0:
       self.score_dict['flow_expiry'] = float(score_flow_expiry)
-    if float(score_return_path) != 0:
-      self.score_dict['multi_send'] = float(score_multi_send)
     if float(score_flooding) != 0:
       self.score_dict['flooding'] = float(score_flooding)
-    if float(score_len_roots) != 0:
-      self.score_dict['len_roots'] = float(score_len_roots)
+    if float(score_num_roots) != 0:
+      self.score_dict['num_roots'] = float(score_num_roots)
+    if float(score_num_hostsends) != 0:
+      self.score_dict['num_hostsends'] = float(score_num_hostsends)
+    if float(score_num_proactive_race) != 0:
+      self.score_dict['num_proactive'] = float(score_num_proactive_race)
 
     # Maximum score
     self.max_score = sum(self.score_dict.values())
@@ -63,9 +57,7 @@ class ClusterAlgorithm:
 
     # Dictionary for the evaluation
     self.eval = {'score': {},
-                 'time': {},
-                 'iso component timeout': 0,
-                 'iso component total': 0}
+                 'time': {}}
 
     # Clusters
     self.clusters = []
@@ -141,52 +133,9 @@ class ClusterAlgorithm:
 
     return tot_dist
 
-  def iso_components(self, cluster1, cluster2):
-    """
-    Score based on isomorphism of isomorphic connected parts of the graphs.
-    """
-    assert cluster1.representative is not None, 'Representative is None'
-    assert cluster2.representative is not None, 'Representative is None'
-
-    iso, t_out = utils.iso_components(cluster1.representative, cluster2.representative)
-    if t_out:
-      self.eval['iso component timeout'] += 1
-
-    self.eval['iso component total'] += 1
-
-    return 0 if iso else 1
-
-  def common_write_event(self, cluster1, cluster2):
-    """
-    Score based on percentage of graphs of the smaller group which have a write id in common with graphs of
-    the bigger group.
-    """
-    if len(cluster1.graphs) >= len(cluster2.graphs):
-      write_ids = cluster1.write_ids
-      graphs = cluster2.graphs
-    else:
-      write_ids = cluster2.write_ids
-      graphs = cluster1.graphs
-
-    # Common write events
-    common = 0
-    # count each graph that has a write_race_id in common with another one
-    for graph in graphs:
-      for w_id in graph.graph['write_ids']:
-        if w_id in write_ids:
-          common += 1
-          # Cont each graph only once! -> break
-          break
-
-    return (len(graphs) - common) / len(graphs)
-
   def pingpong(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs which contain a controller-switch-pingpong"""
     return abs(cluster1.properties['pingpong'] - cluster2.properties['pingpong'])
-
-  def single_send(self, cluster1, cluster2):
-    """ Score based on similarity in terms of percentage of graphs origin from a single event. """
-    return abs(cluster1.properties['single'] - cluster2.properties['single'])
 
   def return_path(self, cluster1, cluster2):
     """ Score based on similarity in terms of percentage of graphs containing a race on the return path."""
@@ -196,17 +145,27 @@ class ClusterAlgorithm:
     """ Score based on similarity in terms of percentage of graphs originate from AsyncFlowExpiry events."""
     return abs(cluster1.properties['flowexpiry'] - cluster2.properties['flowexpiry'])
 
-  def multi_send(self, cluster1, cluster2):
-    """ Score based on similarity in terms of percentage of graphs origin from more than two events."""
-    return abs(cluster1.properties['multi'] - cluster2.properties['multi'])
-
   def flooding(self, cluster1, cluster2):
     """Score based on similarity in terms of percentage of graphs containing flooding."""
     return abs(cluster1.properties['flood'] - cluster2.properties['flood'])
 
-  def len_roots(self, cluster1, cluster2):
+  def num_proactive(self, cluster1, cluster2):
+    """Score based on similarity in terms of percentage of graphs containing flooding."""
+    if cluster1.properties['num_proactive'] == cluster2.properties['num_proactive']:
+      return 0
+    else:
+      return 1
+
+  def num_roots(self, cluster1, cluster2):
     """Score based on number of root events in the clusters"""
-    if cluster1.properties['len_roots'] == cluster2.properties['len_roots']:
+    if cluster1.properties['num_roots'] == cluster2.properties['num_roots']:
+      return 0
+    else:
+      return 1
+
+  def num_hostsends(self, cluster1, cluster2):
+    """Score based on number of root events in the clusters"""
+    if cluster1.properties['num_hostsends'] == cluster2.properties['num_hostsends']:
       return 0
     else:
       return 1

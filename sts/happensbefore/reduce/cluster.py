@@ -1,5 +1,6 @@
 import logging.config
 import itertools
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,12 @@ class Cluster:
 
     self.properties = {             # Properties for "relation functions"
         'pingpong': 0,              # Percentage of graphs containing a controller-switch-pingpong
-        'single': 0,                # Percentage of races origin from a single root event
         'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
         'flowexpiry': 0,            # Percentage of graphs origin from flowexpiry
-        'multi': 0,                  # Percentage of graphs origin from more than two root events
-        'flood': 0,
-        'len_roots': 0
+        'flood': 0,                 # Percentage of graphs containing a flooding action
+        'num_roots': 0,             # Average number of root events
+        'num_hostsends': 0,         # Average number of hostsend events
+        'num_proactive': 0          # Average number of proactive race events
     }
 
     if graphs:
@@ -42,24 +43,9 @@ class Cluster:
 
   def get_properties(self):
     """ Calculates all properties. For a list of the properties see the init function."""
-    # Single Send
-    single = [g for g in self.graphs if g.graph['single']]
-    self.properties['single'] = len(single) / float(len(self.graphs))
 
     # Return path
-    ret = [g for g in self.graphs if len(g.graph['hosthandles']) > 0]
-    self.properties['return'] = len(ret) / float(len(self.graphs))
-
-    # Common write events
-    common = 0
-    # count each graph that has a write_race_id in common with another one
-    for graph in self.graphs:
-      for write_id in graph.graph['write_ids']:
-        if self.write_ids.count(write_id) > 1:
-          common += 1
-          # Cont each graph only once! -> break
-          break
-    self.common_writes = common / float(len(self.graphs))
+    self.properties['return'] = len([g for g in self.graphs if g.graph['return']]) / float(len(self.graphs))
 
     # Pingpong
     self.properties['pingpong'] = len([g for g in self.graphs if g.graph['pingpong']]) / float(len(self.graphs))
@@ -67,14 +53,17 @@ class Cluster:
     # FlowExpiry
     self.properties['flowexpiry'] = len([g for g in self.graphs if g.graph['flowexpiry']]) / float(len(self.graphs))
 
-    # Multiple roots
-    self.properties['multi'] = len([g for g in self.graphs if g.graph['multi']]) / float(len(self.graphs))
-
     # Flooding
     self.properties['flood'] = len([g for g in self.graphs if g.graph['flood']]) / float(len(self.graphs))
 
     # Number of root events (average)
-    self.properties['len_roots'] = sum([len(g.graph['roots']) for g in self.graphs]) / float(len(self.graphs))
+    self.properties['num_roots'] = sum([len(g.graph['roots']) for g in self.graphs]) / float(len(self.graphs))
+
+    # Number of hostsend events (average)
+    self.properties['num_hostsends'] = sum([g.graph['num_hostsends'] for g in self.graphs]) / float(len(self.graphs))
+
+    # Proactive race event
+    self.properties['num_proactive'] = sum([g.graph['num_proactive'] for g in self.graphs]) / float(len(self.graphs))
 
     return
 
@@ -110,18 +99,37 @@ class Cluster:
     """
     Sets representative graph based on the cluster properties.
     """
+    # TODO Update this function to check the new features
     # Get graph  properties
     pingpong = True if self.properties['pingpong'] >= 0.5 else False
-    single = True if self.properties['single'] >= 0.5 else False
     ret = True if self.properties['return'] >= 0.5 else False
+    flowexp = True if self.properties['flowexpiry'] >= 0.5 else False
+    flood = True if self.properties['flood'] >= 0.5 else False
 
     # Get all graphs which satisfy this properties
     candidates = []
     for g in self.graphs:
       if (g.graph['pingpong'] == pingpong and
-          g.graph['single'] == single and
-          g.graph['return'] == ret):
+          g.graph['return'] == ret and
+          g.graph['flowexpiry'] == flowexp and
+          g.graph['flood'] == flood):
         candidates.append(g)
+
+    # Get the graphs with the closest number of roots and host sends
+    min_diff = sys.maxint
+    new_candidates = []
+    for c in candidates:
+      diff = (abs(g.graph['num_hostsends'] - self.properties['num_hostsends']) +
+              abs(len(g.graph['roots']) - self.properties['num_roots']) +
+              abs(g.graph['num_proactive'] - self.properties['num_roots']))
+      if diff < min_diff:
+        new_candidates = [c]
+      elif diff == min_diff:
+        new_candidates.append(c)
+      else:
+        continue
+
+    candidates = new_candidates
 
     # Take the graph with the smallest number of nodes
     candidates.sort(key=len)
@@ -130,14 +138,14 @@ class Cluster:
     self.representative = candidates[0]
 
   def __str__(self):
-    s = 'Cluster %s\n' % self.id
-    s += "\t%-20s: %s\n" % ("Number of graphs", len(self.graphs))
-    s += "\t%-20s:\n" % "Properties"
-    for prop, value in self.properties.iteritems():
-      s += "\t\t%-20s: %s\n" % (prop, value)
-    s += "\t%-20s: %s\n" % ("Common writes", self.common_writes)
+      s = 'Cluster %s\n' % self.id
+      s += "\t%-20s: %s\n" % ("Number of graphs", len(self.graphs))
+      s += "\t%-20s:\n" % "Properties"
+      for prop, value in self.properties.iteritems():
+        s += "\t\t%-20s: %s\n" % (prop, value)
+      s += "\t%-20s: %s\n" % ("Common writes", self.common_writes)
 
-    return s
+      return s
 
 
 
