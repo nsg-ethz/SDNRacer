@@ -2,33 +2,33 @@
 
 # Variables
 # Number of iterations for each configuration
-iter=2
+iter=15
 
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
-controller[1]="floodlight_loadbalancer_fixed"
-controller[2]="floodlight_learningswitch"
-controller[3]="pox_eel_learningswitch"
-controller[4]="pox_eel_l2_multi"
-controller[5]="pox_eel_l2_multi_fixed"
-controller[6]="floodlight_circuitpusher"
-controller[7]="floodlight_forwarding"
-controller[8]="floodlight_firewall"
+#controller[1]="floodlight_loadbalancer_fixed"
+#controller[2]="floodlight_learningswitch"
+#controller[3]="pox_eel_learningswitch"
+#controller[4]="pox_eel_l2_multi"
+#controller[5]="pox_eel_l2_multi_fixed"
+#controller[6]="floodlight_circuitpusher"
+#controller[7]="floodlight_forwarding"
+#controller[8]="floodlight_firewall"
 
 # Topologies
 topology[0]="StarTopology"
-topology[1]="MeshTopology"
-topology[2]="BinaryLeafTreeTopology"
+#topology[1]="MeshTopology"
+#topology[2]="BinaryLeafTreeTopology"
 
 # Steps
 steps[0]="200"
-#steps[1]="400"
+steps[1]="400"
 #steps[2]="600"
 #steps[3]="800"
 
 ############################################
 # Multiprocessing variables and functions
-m_jobs=2         # Maximum number of jobs
+m_jobs=4         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
