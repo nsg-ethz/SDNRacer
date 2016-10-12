@@ -9,6 +9,8 @@ import networkx as nx
 
 import utils
 import hb_events
+import hb_sts_events
+from pox.openflow.libopenflow_01 import ofp_action_output
 
 # create logger
 logger = logging.getLogger(__name__)
@@ -140,20 +142,20 @@ class Subgraph:
         return "%s%s%s%s" % (p.src, p.dst, p.payload_len, p.type)
 
       flooding = False
-      # Get root hostsend pids:
-      pkt_out = [pkt_to_str(g.node[e]['event'].packet) for e in roots if isinstance(g.node[e]['event'], hb_events.HbHostSend)]
-      hh_packets = {}
-      for e_id in hosthandles:
-        e = g.node[e_id]['event']
-        pkt_str = pkt_to_str(e.packet)
-        if pkt_str not in hh_packets:
-          hh_packets[pkt_str] = []
-        hh_packets[pkt_str].append(e.hid)
+      # Get MessageHandles:
+      msg_handles = [g.node[e]['event'] for e in g.nodes() if isinstance(g.node[e]['event'], hb_events.HbMessageHandle)]
+      for e in msg_handles:
+        # Check if type is OFPT_PACKET_OUT (13)
+        if e.msg_type == 13:
+          # Check if there is a flooding in actions
+          if hasattr(e, 'msg') and getattr(e.msg, 'actions', None):
+            for action in e.msg.actions:
+              if isinstance(action, ofp_action_output) and action.port == 65531:
+                flooding = True
+                break
 
-      for k, v in hh_packets.iteritems():
-        if len(v) > 1 and k in pkt_out:
-          flooding = True
-          break
+            if flooding:
+              break
 
       g.graph['flood'] = flooding
 

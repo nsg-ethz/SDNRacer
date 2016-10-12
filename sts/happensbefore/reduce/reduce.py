@@ -252,3 +252,6 @@ if __name__ == '__main__':
   thbgraph = time.clock() - tstart
   r = Reduce(m.graph, args.trace_file, thbgraph)
   r.run()
+
+
+

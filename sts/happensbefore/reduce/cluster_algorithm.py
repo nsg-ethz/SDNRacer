@@ -66,8 +66,6 @@ class ClusterAlgorithm:
                  'time': {},
                  'iso component timeout': 0,
                  'iso component total': 0}
-    for f in self.score_dict.keys():
-      self.eval['score'][f] = []
 
     # Clusters
     self.clusters = []
@@ -140,7 +138,6 @@ class ClusterAlgorithm:
     for f, s in self.score_dict.iteritems():
       dist = getattr(self, f)(cluster1, cluster2) * s
       tot_dist += dist
-      self.eval['score'][f].append(dist)
 
     return tot_dist
 

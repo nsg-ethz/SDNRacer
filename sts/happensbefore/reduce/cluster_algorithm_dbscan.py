@@ -62,8 +62,6 @@ class ClusterAlgorithm:
     # Dictionary for the evaluation
     self.eval = {'score': {},
                  'time': {}}
-    for f in self.score_dict.keys():
-      self.eval['score'][f] = []
 
     # Clusters
     self.clusters = []
@@ -228,7 +226,6 @@ class ClusterAlgorithm:
     for f, s in self.score_dict.iteritems():
       score = getattr(self, f)(cluster1, cluster2) * s
       tot_score += score
-      self.eval['score'][f].append(score)
 
     # Invert score (closeness to distance)
     return tot_score
