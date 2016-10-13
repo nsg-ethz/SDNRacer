@@ -2,7 +2,7 @@
 
 # Variables
 # Number of iterations for each configuration
-iter=15
+iter=3
 
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
@@ -21,15 +21,15 @@ topology[0]="StarTopology"
 #topology[2]="BinaryLeafTreeTopology"
 
 # Steps
-#steps[0]="200"
-#steps[1]="400"
-steps[0]="600"
-steps[1]="800"
-steps[2]="1000"
+steps[0]="200"
+steps[1]="400"
+steps[2]="600"
+steps[3]="800"
+steps[4]="1000"
 
 ############################################
 # Multiprocessing variables and functions
-m_jobs=4         # Maximum number of jobs
+m_jobs=2         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
