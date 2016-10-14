@@ -41,6 +41,10 @@ class Evaluation:
         print "Could not load file: %s" % eval_file
         continue
 
+      except ValueError:
+        print "Could not load file: %s" % eval_file
+        continue
+
       settings = trace_info.split('-')
       controller = settings[0]
       topology = settings[1]
@@ -64,6 +68,9 @@ class Evaluation:
         self.num_cont_topo += 1
         self.num_sim += len(self.eval_dicts[controller][topology].keys())
 
+    # average
+    self.avg = {}
+
     # Prepare directory for results
     self.evaldir = os.path.join(self.eval_folder, 'evaluation')
     if os.path.exists(self.evaldir):
@@ -83,6 +90,8 @@ class Evaluation:
               "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tClustering\n")
       # Clustering information
       for controller in sorted(self.eval_dicts.keys()):
+        if controller not in self.avg:
+          self.avg[controller] = {}
         # Separate controller and module
         if controller.startswith('floodlight'):
           app = controller.replace('floodlight_', '')
@@ -94,8 +103,38 @@ class Evaluation:
           raise RuntimeError("Unknown controller string %s" % controller)
 
         for topology in sorted(self.eval_dicts[controller].keys()):
+          if topology not in self.avg[controller]:
+            self.avg[controller][topology] = {}
           for steps in sorted(self.eval_dicts[controller][topology].keys()):
+            if steps not in self.avg[controller][topology]:
+              self.avg[controller][topology][steps] = {'controller_str': controller_str,
+                                                       'app': app,
+                                                       'topology': topology,
+                                                       'steps': steps,
+                                                       'n_events': 0,
+                                                       'n_graphs': 0,
+                                                       'n_iso': 0,
+                                                       'n_final': 0,
+                                                       't_t': 0,
+                                                       't_hb': 0,
+                                                       't_p': 0,
+                                                       't_s': 0,
+                                                       't_i': 0,
+                                                       't_dm': 0,
+                                                       't_c': 0,
+                                                       'num': 0}
+
             for i, data in sorted(self.eval_dicts[controller][topology][steps].iteritems()):
+              # Add data for average
+              self.avg[controller][topology][steps]['num'] += 1
+              self.avg[controller][topology][steps]['n_events'] += int(data['info']['Number of events'])
+              self.avg[controller][topology][steps]['n_graphs'] += data['info']['Number of graphs']
+              self.avg[controller][topology][steps]['n_iso'] += data['clustering']['info']['Number of clusters after iso']
+              self.avg[controller][topology][steps]['n_final'] += data['info']['Number of clusters']
+              self.avg[controller][topology][steps]['t_t'] += data['time']['total']
+              self.avg[controller][topology][steps]['t_hb'] += data['time']['hb_graph']
+
+              # Generate output
               line = ""
               line += "%s\t" % controller_str
               line += "%s\t" % app
@@ -122,6 +161,30 @@ class Evaluation:
                        data['clustering']['time']['Assign new clusters'])
               line += "\n"
               f.write(line)
+
+      # Average
+      f.write("\n\n\Average\n")
+      f.write(
+        "Controller\tApp\tTopology\tSteps\tIterations\t# Events\t# Races\t# Isomorphic Clusters\t# Final Clusters\t"
+        "Total Time\tHb_Graph\t\n")
+      for controller in sorted(self.avg.keys()):
+        for topology in sorted(self.avg[controller].keys()):
+          for steps, data in sorted(self.avg[controller][topology].iteritems()):
+            line = ""
+            line += "%s\t" % data['controller_str']
+            line += "%s\t" % data['app']
+            line += "%s\t" % data['topology']
+            line += "%s\t" % data['steps']
+            line += "%s\t" % data['num']
+            line += "%.3f\t" % (data['n_events'] / float(data['num']))
+            line += "%.3f\t" % (data['n_graphs'] / float(data['num']))
+            line += "%.3f\t" % (data['n_iso'] / float(data['num']))
+            line += "%.3f\t" % (data['n_final'] / float(data['num']))
+            line += "%.3f s\t" % (data['t_t'] / float(data['num']))
+            line += "%.3f s\t" % (data['t_hb'] / float(data['num']))
+            line += "\n"
+            f.write(line)
+
 
 if __name__ == '__main__':
   # First call hb_graph.py and provide the same parameters
