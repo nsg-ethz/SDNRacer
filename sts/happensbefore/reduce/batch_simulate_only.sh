@@ -10,18 +10,18 @@ iter=1
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
 controller[1]="floodlight_loadbalancer_fixed"
-#controller[2]="floodlight_learningswitch"
-#controller[3]="pox_eel_learningswitch"
-#controller[4]="pox_eel_l2_multi"
-#controller[5]="pox_eel_l2_multi_fixed"
-#controller[6]="floodlight_circuitpusher"
-#controller[7]="floodlight_forwarding"
-#controller[8]="floodlight_firewall"
+controller[2]="floodlight_learningswitch"
+controller[3]="pox_eel_learningswitch"
+controller[4]="pox_eel_l2_multi"
+controller[5]="pox_eel_l2_multi_fixed"
+controller[6]="floodlight_circuitpusher"
+controller[7]="floodlight_forwarding"
+controller[8]="floodlight_firewall"
 
 # Topologies
 topology[0]="StarTopology"
-#topology[1]="MeshTopology"
-#topology[2]="BinaryLeafTreeTopology"
+topology[1]="MeshTopology"
+topology[2]="BinaryLeafTreeTopology"
 
 # Steps
 steps[0]="200"

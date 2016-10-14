@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=1         # Maximum number of jobs
+m_jobs=4         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
