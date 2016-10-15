@@ -48,7 +48,8 @@ fi
 
 batch_log="${res_dir}/simulation.log"
 
-for i in $(seq 1 $iter);
+i=0
+while [[ $i -lt $iter ]];
 do
     echo "Iteration ${i}"
     for c in "${controller[@]}"
@@ -62,12 +63,10 @@ do
                 template="config/template_${c}.py"
                 temp_config="config/conf_${t_stamp}_${exp_num}.py"
                 # continue iteration number if there are already some in the folder
-                iter=0
-                res_path="${res_dir}/${c}-${t}-${s}-${iter}"
-                while [ -d $res_path ] ; do
-                    iter=$(($iter+1))
-                    res_path="${res_dir}/${c}-${t}-${s}-$(($iter))"
-                done
+                res_path="${res_dir}/${c}-${t}-${s}-${i}"
+                if [ -d $res_path ] ; then
+                    continue
+                fi
 
                 sed "s,topology_class=#,topology_class=$t," <"$template" >"$temp_config"
                 sed -i "s,steps=#,steps=${s}," "$temp_config"
@@ -87,13 +86,18 @@ do
                 else
                     tm=$(($SECONDS - $t_start))
                     echo "${res_path} failed ${tm}" >> $batch_log
+                    # remove simulation folder if there is one
+                    if [[ -d $res_path ]] ; then
+                        rm $res_path
+                    fi
                 fi
                 # Remove the config file
                 rm $temp_config
             done
         done
     done
+    i=$(($i+1))
 done
 
-echo "FINISHED"
+echo "$(date +"%D %T"): FINISHED"
 

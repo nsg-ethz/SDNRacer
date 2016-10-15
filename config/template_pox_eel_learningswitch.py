@@ -35,7 +35,7 @@ elif topology_class == BinaryLeafTreeTopology:
 else:
   raise RuntimeError("Unknown Topology.")
 
-seed = 158
+seed = None
 
 apps = None
 

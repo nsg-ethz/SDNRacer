@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=4         # Maximum number of jobs
+m_jobs=1         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -37,42 +37,28 @@ if [[ -z $1 ]] ; then
     echo "Missing parameter: Path to simulation.log file" >&2
     exit 1
 else
-    if [[ ! -f $1 ]] ; then
-        echo "File not found: ${1}"
+    if [[ ! -d $1 ]] ; then
+        echo "Dir not found: ${1}"
     fi
 fi
-sim_file=$1
+res_dir=$1
 
-# Read line by line to find all traces
 traces=""
-while read -r line ; do
-    l=($line)
-    if [ ! ${#l[@]} -eq 3 ] ; then
-        echo "Line not in correct format: ${l}" >&2
-        continue
-    fi
-    if [ ! "${l[1]}" == "successful" ] ; then
-        echo "${l[0]} was not successfull"
-        continue
+for folder in $res_dir/*/ ;do
+    if [[ $folder = *"evaluation"* ]] ; then
+        echo "Skip ${folder}"
     else
-        traces="$traces ${l[0]}"
+        echo "$(date +"%D %T"): Cluster ${folder}"
+        red="${folder%/*}/${folder##*/}_red.txt"
+        ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
+        jobs="$jobs $!"
+        n_jobs=$(($n_jobs + 1))
+
+        while [ $n_jobs -ge $m_jobs ]; do
+            check_jobs
+            sleep 1
+        done
     fi
-done < "${sim_file}"
-
-# Start clustering for all remaining traces
-for trace in $traces
-do
-    # Cluster trace (parallel)
-    echo "$(date +"%D %T"): Cluster ${trace}"
-    red="${trace%/*}/${trace##*/}_red.txt"
-    ./sts/happensbefore/reduce/reduce.py "${trace}/hb.json" >> $red 2>&1 &
-    jobs="$jobs $!"
-    n_jobs=$(($n_jobs + 1))
-
-    while [ $n_jobs -ge $m_jobs ]; do
-        check_jobs
-        sleep 1
-    done
 done
 
 wait
