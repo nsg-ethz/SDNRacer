@@ -73,9 +73,8 @@ class Evaluation:
 
     # Prepare directory for results
     self.evaldir = os.path.join(self.eval_folder, 'evaluation')
-    if os.path.exists(self.evaldir):
-      shutil.rmtree(self.evaldir)
-    os.makedirs(self.evaldir)
+    if not os.path.exists(self.evaldir):
+      os.makedirs(self.evaldir)
 
     # Prepare evaluation Text File
     self.file = os.path.join(self.evaldir, 'eval.txt')
