@@ -29,7 +29,7 @@ for folder in $res_dir/*/ ;do
         num=${num%/}
         num=$(($num + $shift))
         new_folder="${folder%-*}-${num}"
-        mv ${res_dir}/${folder} ${res_dir}/${new_folder}
+        mv ${folder} ${new_folder}
     fi
 done
 
