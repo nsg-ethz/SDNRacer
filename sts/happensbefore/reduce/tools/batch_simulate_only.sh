@@ -88,7 +88,7 @@ do
                     echo "${res_path} failed ${tm}" >> $batch_log
                     # remove simulation folder if there is one
                     if [[ -d $res_path ]] ; then
-                        rm $res_path
+                        rm -R $res_path
                     fi
                 fi
                 # Remove the config file

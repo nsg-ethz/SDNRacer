@@ -36,9 +36,6 @@ elif topology_class == BinaryLeafTreeTopology:
 else:
   raise RuntimeError("Unknown Topology.")
 
-seed = None
-
-apps = None
 
 apps = [AppFloodlightFirewall('firewall', cwd='./', controller='localhost:8080')]
 

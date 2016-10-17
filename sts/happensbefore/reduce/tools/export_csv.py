@@ -4,9 +4,6 @@ import shutil
 import json
 import re
 
-import numpy as np
-import matplotlib.pyplot as plt
-
 class Evaluation:
   """
   This script is to export data from floodlight loadbalancer startopology to a csv for graph generation.
