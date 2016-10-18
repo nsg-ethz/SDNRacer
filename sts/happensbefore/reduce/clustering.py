@@ -88,7 +88,7 @@ class Clustering:
 
           # Check isomorphism with timeout
           try:
-            with utils.timeout(2):
+            with utils.timeout(10):
               if nx.is_isomorphic(group[0], curr_graph, node_match=utils.node_match, edge_match=utils.edge_match):
                 group.append(curr_graph)
                 added = True

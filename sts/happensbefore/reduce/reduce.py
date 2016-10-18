@@ -97,6 +97,10 @@ class Reduce:
     self.clustering.run(graphs, self.algorithm)
 
     # Ranking
+    tr = time.clock()
+    for cluster in self.clustering.clusters:
+      cluster.get_representative()
+    self.eval['time']['ranking'] = time.clock() - tr
 
     # Store data for evaluation
     self.eval['time']['run'] = time.clock() - tstart

@@ -91,8 +91,7 @@ class Cluster:
     self.get_write_ids()
     # Update properties
     self.get_properties()
-    # Update representative graph
-    self.get_representative()
+
     return
 
   def get_representative(self):
@@ -115,19 +114,39 @@ class Cluster:
           g.graph['flood'] == flood):
         candidates.append(g)
 
-    # Get the graphs with the closest number of roots and host sends
+    # Get the graphs with the closest number of Proactive
     min_diff = sys.maxint
     new_candidates = []
     for c in candidates:
-      diff = (abs(g.graph['num_hostsends'] - self.properties['num_hostsends']) +
-              abs(len(g.graph['roots']) - self.properties['num_roots']) +
-              abs(g.graph['num_proactive'] - self.properties['num_roots']))
+      diff = abs(g.graph['num_proactive'] - self.properties['num_roots'])
       if diff < min_diff:
         new_candidates = [c]
       elif diff == min_diff:
         new_candidates.append(c)
-      else:
-        continue
+
+    candidates = new_candidates
+
+    # Get the graphs with the closest number of HostSends
+    min_diff = sys.maxint
+    new_candidates = []
+    for c in candidates:
+      diff = abs(g.graph['num_hostsends'] - self.properties['num_hostsends'])
+      if diff < min_diff:
+        new_candidates = [c]
+      elif diff == min_diff:
+        new_candidates.append(c)
+
+    candidates = new_candidates
+
+    # Get the graphs with the closest number of roots
+    min_diff = sys.maxint
+    new_candidates = []
+    for c in candidates:
+      diff = abs(len(g.graph['roots']) - self.properties['num_roots'])
+      if diff < min_diff:
+        new_candidates = [c]
+      elif diff == min_diff:
+        new_candidates.append(c)
 
     candidates = new_candidates
 
