@@ -64,7 +64,6 @@ for s in "${steps[@]}" ; do
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"
-            continue
             red="${folder%/*}/${folder##*/}_red.txt"
             ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
             jobs="$jobs $!"
