@@ -33,7 +33,7 @@ function check_jobs {
 ############################################
 
 # Skip all folder with substring
-skip="floodlight_loadbalancer"
+skip_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
@@ -66,11 +66,12 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder == *"$skip"*]] ; then
+        elif [[ $folder == *"$skip_string"* ]] ; then
             continue
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"
+            continue
             red="${folder%/*}/${folder##*/}_red.txt"
             ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
             jobs="$jobs $!"
