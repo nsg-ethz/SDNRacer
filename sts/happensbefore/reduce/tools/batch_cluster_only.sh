@@ -41,7 +41,7 @@ steps[0]="200"
 steps[1]="400"
 steps[2]="600"
 steps[3]="800"
-#steps[4]="1000"
+steps[4]="1000"
 
 
 # Check if file parameter is submitted and points to a file
@@ -66,7 +66,7 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder == *"$skip"*]]
+        elif [[ $folder == *"$skip"*]] ; then
             continue
 
         else
