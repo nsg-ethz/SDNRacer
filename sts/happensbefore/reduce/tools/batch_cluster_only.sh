@@ -32,10 +32,14 @@ function check_jobs {
 }
 ############################################
 
+# Skip all folder with substring
+skip="floodlight_loadbalancer"
+
+
 # Process the following number of steps
-steps[0]="200"
-steps[1]="400"
-#steps[2]="600"
+steps[0]="600"
+steps[1]="800"
+steps[2]="1000"
 #steps[3]="800"
 #steps[4]="1000"
 
@@ -60,6 +64,9 @@ for s in "${steps[@]}" ; do
 
         # Process only one stepsize in this iteration
         elif [[ $folder != *"$s"* ]] ; then
+            continue
+
+        elif [[ $folder == *"$skip"*]]
             continue
 
         else
