@@ -47,7 +47,7 @@ class Subgraph:
     # Loop through all races
     for ind, race in enumerate(self.races):
       # logger.debug("Get Subgraph for race %d" % ind)
-      stack = [race.i_event.eid, race.k_event.eid]
+      stack = [race[0], race[1]]
       nodes = []
 
       # Get all nodes in this subgraph
@@ -61,29 +61,18 @@ class Subgraph:
 
       # Generate subgraph
       subg = nx.DiGraph(self.hb_graph.subgraph(nodes), race=race, index=ind)
-      subg.node[subg.graph['race'].i_event.eid]['color'] = 'red'
-      subg.node[subg.graph['race'].k_event.eid]['color'] = 'red'
+      subg.node[subg.graph['race'][0]]['color'] = 'red'
+      subg.node[subg.graph['race'][1]]['color'] = 'red'
 
+      # TODO Add config option
       # nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
 
       # Check if the graph is loop free
-      abort = False
       cycles = list(nx.simple_cycles(subg))
       if cycles:
-        abort = True
         logger.error("Cycles found in graph %d (Size: %d)" % (ind, len(subg.nodes())))
 
-      else:
-        # Verify that the only leaf-nodes are the race events
-        leaves = [x for x in subg.nodes() if not subg.successors(x)]
-        assert len(leaves) == 2, 'Building subgraphs: Not exactly two leaf-nodes (%d)' % len(leaves)
-        assert race.i_event.eid in leaves, 'Building subgraphs: i-event not in leaves (leaves: %s)' % leaves
-        assert race.k_event.eid in leaves, 'Building subgraphs: k-event not in leaves (leaves: %s)' % leaves
-
       self.subgraphs.append(subg)
-
-    if abort:
-      raise RuntimeError("Found cycle, see log")
 
     self.eval['time']['Generate subgraphs'] = time.clock() - tstart
     return
@@ -99,7 +88,7 @@ class Subgraph:
 
       # Roots (use to determine from how much send events this race origins)
       roots = [x for x in g.nodes() if not g.predecessors(x)]
-      g.graph['roots'] = roots
+      g.graph['num_roots'] = len(roots)
 
       # Set if the race is with a AsyncFlowExpiry event
       flow_expiry = False
@@ -117,8 +106,8 @@ class Subgraph:
 
       # Write events (list of all race-write-events in the graph)
       write_events = []
-      i_event = g.graph['race'].i_event.eid
-      k_event = g.graph['race'].k_event.eid
+      i_event = g.graph['race'][0]
+      k_event = g.graph['race'][1]
       if utils.is_write_event(i_event, g):
         write_events.append(i_event)
       if utils.is_write_event(k_event, g):
@@ -154,7 +143,7 @@ class Subgraph:
 
       # Proactive Race event
       g.graph['num_proactive'] = 0
-      for rid in [g.graph['race'].i_event.eid, g.graph['race'].k_event.eid]:
+      for rid in g.graph['race']:
         if g.node[rid].get('cmd_type') == 'Proactive':
           g.graph['num_proactive'] += 1
 

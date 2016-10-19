@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=4        # Maximum number of jobs
+m_jobs=6        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -32,6 +32,14 @@ function check_jobs {
 }
 ############################################
 
+# Process the following number of steps
+steps[0]="200"
+steps[1]="400"
+#steps[2]="600"
+#steps[3]="800"
+#steps[4]="1000"
+
+
 # Check if file parameter is submitted and points to a file
 if [[ -z $1 ]] ; then
     echo "Missing parameter: Path to simulation.log file" >&2
@@ -44,21 +52,30 @@ fi
 res_dir=$1
 
 traces=""
-for folder in $res_dir/*/ ;do
-    if [[ $folder = *"evaluation"* ]] ; then
-        echo "Skip ${folder}"
-    else
-        echo "$(date +"%D %T"): Cluster ${folder}"
-        red="${folder%/*}/${folder##*/}_red.txt"
-        ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
-        jobs="$jobs $!"
-        n_jobs=$(($n_jobs + 1))
+for s in "${steps[@]}" ; do
+    for folder in $res_dir/*/ ;do
+        if [[ $folder = *"evaluation"* ]] ; then
+            echo "Skip ${folder}"
+            continue
 
-        while [ $n_jobs -ge $m_jobs ]; do
-            check_jobs
-            sleep 1
-        done
-    fi
+        # Process only one stepsize in this iteration
+        elif [[ $folder != *"$s"* ]] ; then
+            continue
+
+        else
+            echo "$(date +"%D %T"): Cluster ${folder}"
+            continue
+            red="${folder%/*}/${folder##*/}_red.txt"
+            ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
+            jobs="$jobs $!"
+            n_jobs=$(($n_jobs + 1))
+
+            while [ $n_jobs -ge $m_jobs ]; do
+                check_jobs
+                sleep 1
+            done
+        fi
+    done
 done
 
 wait

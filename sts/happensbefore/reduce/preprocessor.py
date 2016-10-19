@@ -2,9 +2,7 @@ import logging
 import time
 import itertools
 import sys
-import networkx as nx
 
-import utils
 import hb_events
 
 logger = logging.getLogger(__name__)
@@ -17,11 +15,11 @@ class Preprocessor:
     self.remove_nodes = remove_nodes.lower() not in ['false', '0']
     self.remove_pid = remove_pid.lower() not in ['false', '0']
     self.hb_graph = hb_graph
-    self.races = races
     self.race_ids = []
     for race in races:
-      self.race_ids.append(race.i_event.eid)
-      self.race_ids.append(race.k_event.eid)
+      self.race_ids.extend(race)
+    self.race_ids = set(self.race_ids)
+
     self.eval = {'time': {}}
 
   def run(self):
@@ -213,9 +211,6 @@ class Preprocessor:
     """
     Removes all events that happen after (are below) a race event.
     """
-    # Generate list with all race ids
-    race_ids = [x for race in self.races for x in (race.i_event.eid, race.k_event.eid)]
-
     tstart = time.clock()
     logger.debug("Total nodes before removal: %d" % self.hb_graph.number_of_nodes())
 
@@ -227,14 +222,14 @@ class Preprocessor:
       leaf_nodes = [x for x in self.hb_graph.nodes() if not self.hb_graph.successors(x)]
       for leaf in leaf_nodes:
         # If a leaf node is not part of a race, add it for removal
-        if leaf not in race_ids:
+        if leaf not in self.race_ids:
           self.hb_graph.remove_node(leaf)
           nodes_removed += 1
 
       tot_nodes_removed += nodes_removed
 
     # Check that still all races are in the graph
-    for race in race_ids:
+    for race in self.race_ids:
       assert self.hb_graph.has_node(race), "Race event with id %s not in graph" % race
 
     logger.debug("Total nodes after removal: %d" % self.hb_graph.number_of_nodes())

@@ -46,13 +46,15 @@ class Reduce:
     import subgraph
     import cluster_algorithm
 
-    # Store copy of hb_graph and the harmful races
-    self.hb_graph = hb_graph.g.copy()
-    self.races = hb_graph.race_detector.races_harmful
     # Exit if there are no races in the trace
-    if len(self.races) == 0:
+    if len(hb_graph.race_detector.races_harmful) == 0:
       self.logger.info("There are no races in the trace.")
       sys.exit(0)
+    # Store copy of hb_graph and the harmful races
+    self.hb_graph = hb_graph.g
+    self.races = []
+    for race in hb_graph.race_detector.races_harmful:
+      self.races.append((race.i_event.eid, race.k_event.eid))
 
     # Parse config
     config = ConfigParser.RawConfigParser()
@@ -121,7 +123,6 @@ class Reduce:
     self.eval['graphs'] = []
     for graph in self.subgraph.subgraphs:
       # replace the race from the dictionary with just the event ids (race object not serializable)
-      graph.graph['race'] = (graph.graph['race'].i_event.eid, graph.graph['race'].i_event.eid)
       self.eval['graphs'].append(graph.graph)
 
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
@@ -246,6 +247,7 @@ if __name__ == '__main__':
   m.run()
   thbgraph = time.clock() - tstart
   r = Reduce(m.graph, args.trace_file, thbgraph)
+  del m
   r.run()
 
 

@@ -57,7 +57,7 @@ class Cluster:
     self.properties['flood'] = len([g for g in self.graphs if g.graph['flood']]) / float(len(self.graphs))
 
     # Number of root events (average)
-    self.properties['num_roots'] = sum([len(g.graph['roots']) for g in self.graphs]) / float(len(self.graphs))
+    self.properties['num_roots'] = sum([g.graph['num_roots'] for g in self.graphs]) / float(len(self.graphs))
 
     # Number of hostsend events (average)
     self.properties['num_hostsends'] = sum([g.graph['num_hostsends'] for g in self.graphs]) / float(len(self.graphs))
@@ -118,7 +118,7 @@ class Cluster:
     min_diff = sys.maxint
     new_candidates = []
     for c in candidates:
-      diff = abs(g.graph['num_proactive'] - self.properties['num_roots'])
+      diff = abs(g.graph['num_proactive'] - self.properties['num_proactive'])
       if diff < min_diff:
         new_candidates = [c]
       elif diff == min_diff:
@@ -142,7 +142,7 @@ class Cluster:
     min_diff = sys.maxint
     new_candidates = []
     for c in candidates:
-      diff = abs(len(g.graph['roots']) - self.properties['num_roots'])
+      diff = abs(g.graph['num_roots'] - self.properties['num_roots'])
       if diff < min_diff:
         new_candidates = [c]
       elif diff == min_diff:
