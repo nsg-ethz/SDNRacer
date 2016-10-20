@@ -109,6 +109,8 @@ class Evaluation:
                                                        'n_events': [],
                                                        'n_graphs': [],
                                                        'n_iso': [],
+                                                       'n_iso_timeout': [],
+                                                       'n_iso_total': [],
                                                        'n_final': [],
                                                        't_t': [],
                                                        't_hb': [],
@@ -125,6 +127,8 @@ class Evaluation:
               self.avg[controller][topology][steps]['n_events'].append(int(data['info']['Number of events']))
               self.avg[controller][topology][steps]['n_graphs'].append(data['info']['Number of graphs'])
               self.avg[controller][topology][steps]['n_iso'].append(data['clustering']['info']['Number of clusters after iso'])
+              self.avg[controller][topology][steps]['n_iso_timeout'].append(data['clustering']['iso init timeout'])
+              self.avg[controller][topology][steps]['n_iso_total'].append(data['clustering']['iso init total'])
               self.avg[controller][topology][steps]['n_final'].append(data['info']['Number of clusters'])
               self.avg[controller][topology][steps]['t_t'].append(data['time']['total'])
               self.avg[controller][topology][steps]['t_hb'].append(data['time']['hb_graph'])
@@ -144,8 +148,12 @@ class Evaluation:
             line += "%s," % data['num']
             line += "%.3f," % np.median(data['n_events'])
             line += "%.3f," % np.median(data['n_graphs'])
-            line += "%.3f," % np.median(data['n_iso'])
-            line += "%.3f," % np.median(data['n_final'])
+            line += "%.3f (%.6f %%)," % (np.median(data['n_iso']),
+                                         np.median(data['n_iso']) / float(np.median(data['n_graphs'])) * 100)
+            line += "%.3f (%.6f %%)," % (np.median(data['n_iso_timeout']),
+                                         np.median(data['n_iso_timeout']) / float(np.median(data['n_iso_total'])) * 100)
+            line += "%.3f (%.6f %%)," % (np.median(data['n_final']),
+                                         np.median(data['n_final']) / float(np.median(data['n_graphs'])) * 100)
             line += "%.3f s," % np.median(data['t_t'])
             line += "%.3f s\n" % np.median(data['t_hb'])
             f.write(line)
