@@ -33,15 +33,18 @@ function check_jobs {
 ############################################
 
 # Skip all folder with substring
-skip_string="floodlight_loadbalancer"
+skip_string="BinaryLeafTreeTopology"
+
+# Only process folder whit this substring
+only_string="floodlight"
 
 
 # Process the following number of steps
-steps[0]="200"
-steps[1]="400"
-steps[2]="600"
-steps[3]="800"
-steps[4]="1000"
+steps[0]="600"
+#steps[1]="400"
+#steps[2]="600"
+#steps[3]="800"
+#steps[4]="1000"
 
 
 # Check if file parameter is submitted and points to a file
@@ -66,11 +69,15 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
+        elif [[ $folder != *"$only_string"* ]] ; then
+            continue
+
         elif [[ $folder == *"$skip_string"* ]] ; then
             continue
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"
+            
             red="${folder%/*}/${folder##*/}_red.txt"
             ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
             jobs="$jobs $!"
