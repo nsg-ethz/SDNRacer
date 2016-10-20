@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=6        # Maximum number of jobs
+m_jobs=5        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -36,11 +36,11 @@ function check_jobs {
 skip_string="BinaryLeafTreeTopology"
 
 # Only process folder whit this substring
-only_string="floodlight"
+only_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
-steps[0]="600"
+steps[0]="800"
 #steps[1]="400"
 #steps[2]="600"
 #steps[3]="800"
@@ -77,7 +77,7 @@ for s in "${steps[@]}" ; do
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"
-            
+
             red="${folder%/*}/${folder##*/}_red.txt"
             ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
             jobs="$jobs $!"
