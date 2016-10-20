@@ -25,10 +25,10 @@ topology[2]="BinaryLeafTreeTopology"
 
 # Steps
 steps[0]="200"
-steps[1]="400"
-steps[2]="600"
-steps[3]="800"
-steps[4]="1000"
+#steps[1]="400"
+#steps[2]="600"
+#steps[3]="800"
+#steps[4]="1000"
 
 ############################################
 exp_num=0
@@ -93,6 +93,7 @@ do
                 fi
                 # Remove the config file
                 rm $temp_config
+                sleep 5
             done
         done
     done

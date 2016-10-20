@@ -71,7 +71,6 @@ class Clustering:
     self.graphs.sort(key=len, reverse=True)
 
     # Put all isomorphic graphs in groups
-    stack = self.graphs[:]  # Copy of graph list to process
     groups = []  # List groups of graphs which are later used to create the clusters
     groups_timeout = []
 
@@ -82,7 +81,7 @@ class Clustering:
       for group in reversed(groups):
         # Because of the odering (sorted and reversed) we can break as soon as the graph is smaller
         # as the graphs in the current group.
-        if len(group[0]) > len(group[0]):
+        if len(group[0]) > len(curr_graph):
           break
         if nx.faster_could_be_isomorphic(group[0], curr_graph):
 
@@ -101,7 +100,7 @@ class Clustering:
           finally:
             self.eval['iso init total'] += 1
 
-      # if not -> prepare new cluster
+      # if not -> new cluster
       if not added:
         groups.append([curr_graph])
 
@@ -163,7 +162,8 @@ class Clustering:
         elif 'iso_cluster' in graph.graph and graph.graph['iso_cluster'] not in iso_exported:
           nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'iso_%03d.dot' % graph.graph['iso_cluster']))
           iso_exported.append(graph.graph['iso_cluster'])
-        nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
+        # TODO add config option
+        # nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
 
     # Export outliers (remaining)
     if self.remaining:

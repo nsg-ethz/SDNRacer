@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=5        # Maximum number of jobs
+m_jobs=2        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -40,8 +40,8 @@ only_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
-steps[0]="800"
-steps[1]="1000"
+steps[0]="200"
+#steps[1]="1000"
 #steps[2]="600"
 #steps[3]="800"
 #steps[4]="1000"
@@ -69,11 +69,11 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"$only_string"* ]] ; then
-            continue
+        #elif [[ $folder != *"$only_string"* ]] ; then
+        #    continue
 
-        elif [[ $folder == *"$skip_string"* ]] ; then
-            continue
+        #elif [[ $folder == *"$skip_string"* ]] ; then
+        #    continue
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"

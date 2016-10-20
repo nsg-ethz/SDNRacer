@@ -571,7 +571,7 @@ class Fuzzer(ControlFlow):
         # randomly generate messages from switches
         for host in self.simulation.topology.hosts:
           # If there is a flow for a host, skip the random part and send the next packet
-          traffic_type = "icmp_ping"
+          traffic_type = "icmp_flow"
           if host in self.traffic_generator.flow:
             f.write("continue flow\n")
             msg.event("Injecting next flow packet")

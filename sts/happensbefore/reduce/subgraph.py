@@ -64,7 +64,7 @@ class Subgraph:
       subg.node[subg.graph['race'][0]]['color'] = 'red'
       subg.node[subg.graph['race'][1]]['color'] = 'red'
 
-      # TODO Add config option
+      # Only for debugging
       # nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
 
       # Check if the graph is loop free
