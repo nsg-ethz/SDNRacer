@@ -5,7 +5,7 @@
 
 # Variables
 # Number of iterations for each configuration
-iter=5
+iter=15
 
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
