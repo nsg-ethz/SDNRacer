@@ -40,7 +40,7 @@ only_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
-steps[0]="200"
+steps[0]="400"
 #steps[1]="1000"
 #steps[2]="600"
 #steps[3]="800"
