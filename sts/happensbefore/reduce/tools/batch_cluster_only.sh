@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=12        # Maximum number of jobs
+m_jobs=6        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -33,14 +33,14 @@ function check_jobs {
 ############################################
 
 # Skip all folder with substring
-skip_string="BinaryLeafTreeTopology"
+skip_string="floodlight_loadbalancer"
 
 # Only process folder whit this substring
-only_string="floodlight_loadbalancer"
+#only_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
-steps[0]="400"
+steps[0]="600"
 #steps[1]="1000"
 #steps[2]="600"
 #steps[3]="800"
@@ -72,8 +72,8 @@ for s in "${steps[@]}" ; do
         #elif [[ $folder != *"$only_string"* ]] ; then
         #    continue
 
-        #elif [[ $folder == *"$skip_string"* ]] ; then
-        #    continue
+        elif [[ $folder == *"$skip_string"* ]] ; then
+            continue
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"

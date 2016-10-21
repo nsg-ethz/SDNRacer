@@ -8,7 +8,7 @@ if (length(args)!=1) {
 } else {
   csv_file <- args[1]
   eval_dir <- dirname(csv_file)
-  out_file <- paste(eval_dir,"/loadbalancer.png",sep="")
+  out_file <- paste(eval_dir,"/loadbalancer.pdf",sep="")
 }
 
 data <- read.csv(file=csv_file, head=TRUE, sep=",")
@@ -34,7 +34,7 @@ for (dat in d){
 }
 
 # Prepare device
-png(file=out_file)
+pdf(file=out_file)
 
 # Prepare Plot
 xrange <- range(data$steps)
