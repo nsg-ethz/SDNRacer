@@ -34,6 +34,19 @@ class Evaluation:
     self.file = os.path.join(self.evaldir, 'eval_all.csv')
     self.median_file = os.path.join(self.evaldir, 'eval_median.csv')
 
+    # Rename dictionary (change names for table)
+    self.r_dict = {'BinaryLeafTreeTopology': 'BinTree',
+                   'StarTopology': 'Single',
+                   'MeshTopology': 'Linear',
+                   'circuitpusher': 'CircuitPusher',
+                   'firewall': 'Adm. Ctrl.',
+                   'loadbalancer': 'LoadBalancer',
+                   'loadbalancer_fixed': 'Loadbalancer Fx',
+                   'forwarding': 'Forwarding',
+                   'l2_multi': 'Forwarding',
+                   'l2_multi_fixed': 'Forwarding Fx',
+                   'learningswitch': 'LearningSwitch'}
+
   def run(self):
     # Fetch data
     self.fetch_data()
@@ -182,7 +195,7 @@ class Evaluation:
       try:
         with open(eval_file, 'r') as f:
           data = json.load(f)
-          trace_info = folder
+          trace_info = self.rename(folder)
 
       except IOError:
         print "Could not load file: %s" % eval_file
@@ -210,7 +223,8 @@ class Evaluation:
   def fetch_simulation_time(self):
     with open(self.sim_log, 'r') as f:
       for line in f:
-        l = line.split(" ")
+        l = self.rename(l)
+        l = l.split(" ")
         # Only consider successfull simulations
         if l[1] == 'failed':
           print "Failed simulation: %s" % line
@@ -224,6 +238,11 @@ class Evaluation:
           self.eval_dicts[controller][topology][steps][iteration]['sim_time'] = float(l[2])
         except KeyError:
           print "Not in eval dicts: %s" % line
+
+  def rename(self, s):
+    for k, v in self.r_dict.iteritems():
+      s.replace(k, v)
+    return s
 
 
 if __name__ == '__main__':
