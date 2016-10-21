@@ -76,13 +76,17 @@ class Evaluation:
       os.makedirs(self.evaldir)
 
     # Prepare evaluation Text File
-    self.file = os.path.join(self.evaldir, 'eval.csv')
+    self.file = os.path.join(self.evaldir, 'eval_all.csv')
+    self.median_file = os.path.join(self.evaldir, 'eval_median.csv')
 
   def run(self):
     # Write eval file
     print "Write eval.csv file"
     print "Path %s" % self.file
+
     with open(self.file, 'w') as f:
+      f.write("Controller,App,Topology,Steps,iter,# Events,# Races,# Isomorphic Clusters,# Final Clusters,"
+              "Total Time,Hb_Graph,Preprocess hb_graph,Subgraphs,Init Clusters,Distance Matrix,Clustering\n")
       # Clustering information
       for controller in sorted(self.eval_dicts.keys()):
         if controller not in self.avg:
@@ -133,10 +137,32 @@ class Evaluation:
               self.avg[controller][topology][steps]['t_t'].append(data['time']['total'])
               self.avg[controller][topology][steps]['t_hb'].append(data['time']['hb_graph'])
 
+              # Generate output
+              line = ""
+              line += "%s," % controller_str
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % str(steps)
+              line += "%s," % str(i)  # Iteration number
+              line += "%s," % data['info']['Number of events']
+              line += "%s," % data['info']['Number of graphs']
+              line += "%s," % data['clustering']['info']['Number of clusters after iso']
+              line += "%s," % data['info']['Number of clusters']
+              line += "%.3f s," % data['time']['total']
+              line += "%.3f s," % data['time']['hb_graph']
+              line += "%.3f s," % data['preprocessor']['time']['Total']
+              line += "%.3f s," % data['subgraph']['time']['Total']
+              line += "%.3f s," % data['clustering']['time']['Initialize cluster']
+              line += "%.3f s," % data['clustering']['time']['Calculate distance matrix']
+              line += "%.3f s\n" % \
+                      (data['clustering']['time']['Calculate clustering'] +
+                       data['clustering']['time']['Assign new clusters'])
+              f.write(line)
+
+    with open(self.median_file, 'w') as f:
       # Average
-      f.write(
-        "Controller,App,Topology,Steps,Number,# Events,# Races,# Isomorphic Clusters,# Final Clusters,"
-        "Total Time,Hb_Graph\n")
+      f.write("Controller,App,Topology,Steps,Number,# Events,# Races, # Timeouts, # Isomorphic Clusters,"
+              "# Final Clusters,Total Time,Hb_Graph\n")
       for controller in sorted(self.avg.keys()):
         for topology in sorted(self.avg[controller].keys()):
           for steps, data in sorted(self.avg[controller][topology].iteritems()):
