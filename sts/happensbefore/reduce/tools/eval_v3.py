@@ -241,7 +241,7 @@ class Evaluation:
 
   def rename(self, s):
     for k, v in self.r_dict.iteritems():
-      s.replace(k, v)
+      s = s.replace(k, v)
     return s
 
 
