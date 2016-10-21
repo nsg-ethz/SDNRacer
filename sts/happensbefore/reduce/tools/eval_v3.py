@@ -160,7 +160,7 @@ class Evaluation:
             line += "%.3f s," % round(np.median(data['t_t']), 3)
             line += "%.3f s," % round(np.median(data['t_hb']), 3)
             if data['t_sim']:
-              line += "%f s" % np.median(data['t_sim'])
+              line += "%.1f s" % np.median(data['t_sim'])
             else:
               line += "N/A"
             line += "\n"
