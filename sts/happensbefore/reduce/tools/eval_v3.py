@@ -41,11 +41,10 @@ class Evaluation:
                    'circuitpusher': 'CircuitPusher',
                    'firewall': 'Adm. Ctrl.',
                    'loadbalancer': 'LoadBalancer',
-                   'loadbalancer_fixed': 'Loadbalancer Fx',
                    'forwarding': 'Forwarding',
                    'l2_multi': 'Forwarding',
-                   'l2_multi_fixed': 'Forwarding Fx',
-                   'learningswitch': 'LearningSwitch'}
+                   'learningswitch': 'LearningSwitch',
+                   '_fixed': ' Fx'}
 
   def run(self):
     # Fetch data
@@ -195,7 +194,7 @@ class Evaluation:
       try:
         with open(eval_file, 'r') as f:
           data = json.load(f)
-          trace_info = self.rename(folder)
+          trace_info = folder
 
       except IOError:
         print "Could not load file: %s" % eval_file
@@ -206,8 +205,8 @@ class Evaluation:
         continue
 
       settings = trace_info.split('-')
-      controller = settings[0]
-      topology = settings[1]
+      controller = self.rename(settings[0])
+      topology = self.rename(settings[1])
       steps = int(re.search(r'\d+$', settings[2]).group())
       iteration = settings[3]
 
@@ -223,15 +222,14 @@ class Evaluation:
   def fetch_simulation_time(self):
     with open(self.sim_log, 'r') as f:
       for line in f:
-        l = self.rename(line)
-        l = l.split(" ")
+        l = line.split(" ")
         # Only consider successfull simulations
         if l[1] == 'failed':
           print "Failed simulation: %s" % line
           continue
         settings = (l[0].split("/")[-1]).split('-')
-        controller = settings[0]
-        topology = settings[1]
+        controller = self.rename(settings[0])
+        topology = self.rename(settings[1])
         steps = int(re.search(r'\d+$', settings[2]).group())
         iteration = settings[3]
         try:
