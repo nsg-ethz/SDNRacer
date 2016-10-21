@@ -141,24 +141,24 @@ class Evaluation:
             line += "%s," % data['topology']
             line += "%s," % data['steps']
             line += "%s," % data['num']
-            line += "%.3f," % np.median(data['n_events'])
-            line += "%.3f," % np.median(data['n_graphs'])
-            line += "%d (%.3f %%)," % (int(np.median(data['n_iso'])),
-                                       float(np.median(data['n_iso'])) /
-                                       float(np.median(data['n_graphs'])) * 100)
+            line += "%d," % np.median(data['n_events'])
+            line += "%d," % np.median(data['n_graphs'])
+            line += "%d (%.2f %%)," % (int(np.median(data['n_iso'])),
+                                       round(float(np.median(data['n_iso'])) /
+                                       float(np.median(data['n_graphs'])) * 100, 2))
             if np.median(data['n_iso_total']) == 0:
               assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
-              line += "0 (0%%),"
+              line += "0 (0.00%%),"
             else:
-              line += "%d (%.3f %%)," % (int(np.median(data['n_iso_timeout'])),
-                                         float(np.median(data['n_iso_timeout'])) /
-                                         float(np.median(data['n_iso_total'])) * 100)
+              line += "%d (%.2f %%)," % (int(np.median(data['n_iso_timeout'])),
+                                         round(float(np.median(data['n_iso_timeout'])) /
+                                         float(np.median(data['n_iso_total'])) * 100, 2))
 
-            line += "%d (%.3f %%)," % (int(np.median(data['n_final'])),
-                                       float(np.median(data['n_final'])) /
-                                       float(np.median(data['n_graphs'])) * 100)
-            line += "%.3f s," % np.median(data['t_t'])
-            line += "%.3f s," % np.median(data['t_hb'])
+            line += "%d (%.2f %%)," % (int(np.median(data['n_final'])),
+                                       round(float(np.median(data['n_final'])) /
+                                       float(np.median(data['n_graphs'])) * 100, 2))
+            line += "%.3f s," % round(np.median(data['t_t'], 3))
+            line += "%.3f s," % round(np.median(data['t_hb'], 3))
             if data['t_sim']:
               line += "%f s" % np.median(data['t_sim'])
             else:
