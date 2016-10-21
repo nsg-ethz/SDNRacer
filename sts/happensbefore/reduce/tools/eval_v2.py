@@ -1,11 +1,8 @@
 import argparse
 import os
-import shutil
 import json
 import re
 
-import numpy as np
-import matplotlib.pyplot as plt
 
 class Evaluation:
   def __init__(self, eval_folder):
@@ -163,9 +160,8 @@ class Evaluation:
 
       # Average
       f.write("\n\n\Average\n")
-      f.write(
-        "Controller\tApp\tTopology\tSteps\tIterations\t# Events\t# Races\t# Isomorphic Clusters\t# Final Clusters\t"
-        "Total Time\tHb_Graph\t\n")
+      f.write("Controller\tApp\tTopology\tSteps\tIterations\t# Events\t# Races\t# Isomorphic Clusters\t# "
+              "Final Clusters\tTotal Time\tHb_Graph\t\n")
       for controller in sorted(self.avg.keys()):
         for topology in sorted(self.avg[controller].keys()):
           for steps, data in sorted(self.avg[controller][topology].iteritems()):
