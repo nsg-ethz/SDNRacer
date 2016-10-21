@@ -223,7 +223,7 @@ class Evaluation:
   def fetch_simulation_time(self):
     with open(self.sim_log, 'r') as f:
       for line in f:
-        l = self.rename(l)
+        l = self.rename(line)
         l = l.split(" ")
         # Only consider successfull simulations
         if l[1] == 'failed':
