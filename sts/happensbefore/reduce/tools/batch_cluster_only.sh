@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=4        # Maximum number of jobs
+m_jobs=2        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -66,7 +66,7 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"BinaryLeafTreeTopology"* ]] ; then
             continue
 
-        elif [[ $folder != *"floodlight_loadbalancer"* ]] ; then
+        elif [[ $folder != *"floodlight_loadbalancer_fixed"* ]] ; then
             continue
 
         else
