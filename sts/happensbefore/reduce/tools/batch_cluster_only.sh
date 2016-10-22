@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=6        # Maximum number of jobs
+m_jobs=4        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -33,10 +33,10 @@ function check_jobs {
 ############################################
 
 # Skip all folder with substring
-skip_string="floodlight_loadbalancer"
+skip_string="BinaryLeafTreeTopology"
 
 # Only process folder whit this substring
-#only_string="floodlight_loadbalancer"
+only_string="floodlight_loadbalancer"
 
 
 # Process the following number of steps
