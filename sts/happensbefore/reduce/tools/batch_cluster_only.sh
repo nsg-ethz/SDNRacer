@@ -66,7 +66,7 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"BinaryLeafTreeTopology"* ]] ; then
             continue
 
-        elif [[ $folder != *"floodlight_loadbalancer_fixed"* ]] ; then
+        elif [[ $folder != *"floodlight_loadbalancer-BinaryLeafTreeTopology"* ]] ; then
             continue
 
         else
