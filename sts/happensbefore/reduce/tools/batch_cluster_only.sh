@@ -32,12 +32,6 @@ function check_jobs {
 }
 ############################################
 
-# Skip all folder with substring
-skip_string="BinaryLeafTreeTopology"
-
-# Only process folder whit this substring
-only_string="floodlight_loadbalancer"
-
 
 # Process the following number of steps
 steps[0]="600"
@@ -69,10 +63,10 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        #elif [[ $folder != *"$only_string"* ]] ; then
-        #    continue
+        elif [[ $folder != *"BinaryLeafTreeTopology"* ]] ; then
+            continue
 
-        elif [[ $folder == *"$skip_string"* ]] ; then
+        elif [[ $folder != *"floodlight_loadbalancer"* ]] ; then
             continue
 
         else
