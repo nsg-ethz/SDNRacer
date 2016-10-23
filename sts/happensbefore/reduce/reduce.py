@@ -49,6 +49,25 @@ class Reduce:
     # Exit if there are no races in the trace
     if len(hb_graph.race_detector.races_harmful) == 0:
       self.logger.info("There are no races in the trace.")
+      # Add eval.json anyway for the evaluation
+      t_exit = time.clock() - tstart
+      self.eval = {'time': {'Init': t_exit,
+                            'hb_graph': thbgraph,
+                            'run': 0,
+                            'total': thbgraph + t_exit},
+                   'Number of events': len(hb_graph.g),
+                   'preprocessor': {'time': {'total': 0}},
+                   'subgraph': {'time': {'total': 0}},
+                   'clustering': {'info': {'Number of clusters after iso': 0},
+                                  'iso init timeout': 0,
+                                  'iso init total': 0,
+                                  'time': {'total': 0}},
+                   'info': {'Number of graphs': 0,
+                            'Number of clusters': 0},
+                   'graphs': []}
+      with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
+        json.dump(self.eval, outfile)
+      # Exit
       sys.exit(0)
     # Store copy of hb_graph and the harmful races
     self.hb_graph = hb_graph.g
