@@ -63,10 +63,10 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder == *"loadbalancer"* ]] ; then
+        elif [[ $folder != *"loadbalancer"* ]] ; then
             continue
 
-        elif [[ $folder == *"floodlight_loadbalancer"* ]] ; then
+        elif [[ $folder != *"MeshTopology"* ]] ; then
             continue
 
         else

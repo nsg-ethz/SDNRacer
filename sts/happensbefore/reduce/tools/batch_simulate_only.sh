@@ -19,8 +19,8 @@ controller[1]="floodlight_loadbalancer_fixed"
 #controller[1]="floodlight_firewall"
 
 # Topologies
-#topology[0]="StarTopology"
-topology[0]="MeshTopology"
+topology[0]="StarTopology"
+#topology[0]="MeshTopology"
 #topology[2]="BinaryLeafTreeTopology"
 
 # Steps
