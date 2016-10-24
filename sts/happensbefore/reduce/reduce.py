@@ -55,16 +55,21 @@ class Reduce:
                             'hb_graph': thbgraph,
                             'run': 0,
                             'total': thbgraph + t_exit},
-                   'preprocessor': {'time': {'total': 0}},
-                   'subgraph': {'time': {'total': 0}},
+                   'preprocessor': {'time': {'Total': 0}},
+                   'subgraph': {'time': {'Total': 0}},
                    'clustering': {'info': {'Number of clusters after iso': 0},
                                   'iso init timeout': 0,
                                   'iso init total': 0,
-                                  'time': {'total': 0}},
+                                  'time': {'Total': 0,
+                                           'Initialize cluster': 0,
+                                           'Calculate distance matrix': 0,
+                                           'Calculate clustering': 0,
+                                           'Assign new clusters': 0}},
                    'info': {'Number of events': len(hb_graph.g),
                             'Number of graphs': 0,
                             'Number of clusters': 0},
                    'graphs': []}
+           
       with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
         json.dump(self.eval, outfile)
       # Exit
