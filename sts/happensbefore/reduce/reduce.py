@@ -69,7 +69,7 @@ class Reduce:
                             'Number of graphs': 0,
                             'Number of clusters': 0},
                    'graphs': []}
-           
+
       with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
         json.dump(self.eval, outfile)
       # Exit
