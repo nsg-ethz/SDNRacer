@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=4        # Maximum number of jobs
+m_jobs=8        # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -63,10 +63,10 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"loadbalancer"* ]] ; then
+        elif [[ $folder != *"loadbalancer_fixed"* ]] ; then
             continue
 
-        elif [[ $folder != *"MeshTopology"* ]] ; then
+        elif [[ $folder != *"StarTopology"* ]] ; then
             continue
 
         else
