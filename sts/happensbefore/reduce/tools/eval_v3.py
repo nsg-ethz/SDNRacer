@@ -56,9 +56,6 @@ class Evaluation:
       self.fetch_simulation_time()
 
     # Write eval file
-    print "Write eval.csv file"
-    print "Path %s" % self.file
-
     with open(self.file, 'w') as f:
       f.write("Controller,App,Topology,Steps,iter,# Events,# Races,# Isomorphic Clusters,# Final Clusters,"
               "Total Time,Hb_Graph,Preprocess hb_graph,Subgraphs,Init Clusters,Distance Matrix,Clustering\n")
@@ -186,7 +183,6 @@ class Evaluation:
       if folder == 'evaluation':
         continue
 
-      print "Load trace %s" % folder
       # Try to read eval file
       eval_file = os.path.join(self.eval_folder, *[folder, 'reduce', 'eval.json'])
       try:
