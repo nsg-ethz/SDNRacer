@@ -162,7 +162,7 @@ class Evaluation:
                 line += "%d," % round(np.median(data['n_events']))
                 line += "%d,," % round(np.median(data['n_graphs']))
                 # BigBug Info
-                line += "%.2f (%.2f %%)," % (round(np.median(data['n_iso']), 2),
+                line += "%.d (%.2f %%)," % (round(np.median(data['n_iso'])),
                                              round(float(np.median(data['n_iso'])) /
                                              float(np.median(data['n_graphs'])) * 100, 2))
                 if np.median(data['n_iso_total']) == 0:
