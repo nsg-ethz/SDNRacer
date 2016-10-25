@@ -153,7 +153,7 @@ class Evaluation:
                                            float(np.median(data['n_graphs'])) * 100, 2))
                 if np.median(data['n_iso_total']) == 0:
                   assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
-                  line += "0 (0.00%%),"
+                  line += "0 (0.00 %),"
                 else:
                   line += "%d (%.2f %%)," % (int(np.median(data['n_iso_timeout'])),
                                              round(float(np.median(data['n_iso_timeout'])) /

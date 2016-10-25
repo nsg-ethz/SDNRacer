@@ -63,10 +63,10 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"loadbalancer-"* ]] ; then
+        elif [[ $folder != *"loadbalancer_fixed"* ]] ; then
             continue
 
-        elif [[ $folder != *"StarTopology"* ]] ; then
+        elif [[ $folder != *"BinaryLeafTree"* ]] ; then
             continue
 
         else
