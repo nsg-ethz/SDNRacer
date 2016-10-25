@@ -5,11 +5,11 @@
 
 # Variables
 # Number of iterations for each configuration
-iter=15
+iter=5
 
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
-controller[1]="floodlight_loadbalancer_fixed"
+#controller[1]="floodlight_loadbalancer_fixed"
 #controller[2]="floodlight_learningswitch"
 #controller[3]="pox_eel_learningswitch"
 #controller[4]="pox_eel_l2_multi"
@@ -19,16 +19,16 @@ controller[1]="floodlight_loadbalancer_fixed"
 #controller[1]="floodlight_firewall"
 
 # Topologies
-#topology[0]="StarTopology"
+topology[0]="StarTopology"
 #topology[0]="MeshTopology"
-topology[1]="BinaryLeafTreeTopology"
+#topology[1]="BinaryLeafTreeTopology"
 
 # Steps
-steps[0]="800"
-steps[1]="1000"
-#steps[2]="600"
-#steps[3]="800"
-#steps[4]="1000"
+steps[0]="200"
+steps[1]="400"
+steps[2]="600"
+steps[3]="800"
+steps[4]="1000"
 
 ############################################
 exp_num=0
