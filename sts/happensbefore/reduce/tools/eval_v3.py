@@ -51,11 +51,13 @@ class Evaluation:
     self.exp_steps = [200, 400, 600, 800, 1000]
 
   def run(self):
-    print "Write Output"
+
     # Fetch data
     self.fetch_data()
     if self.sim_log is not None:
       self.fetch_simulation_time()
+
+    print "Write Output"
 
     # Write eval file
     with open(self.file, 'w') as f:
