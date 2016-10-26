@@ -170,23 +170,24 @@ class Evaluation:
               with open(self.timing_file, 'a+') as f:
                 f.write(line)
 
-              # % reduced
-              line = ""
-              line += "%s," % app
-              line += "%s," % topology
-              line += "%s," % controller
-              line += "%s," % steps
-              line += "%d," % data['info']['Number of graphs']
-              line += "%d," % data['clustering']['info']['Number of clusters after iso']
-              line += "%d," % data['info']['Number of clusters']
-              iso = (1 - (float(data['clustering']['info']['Number of clusters after iso']) /
-                          float(data['info']['Number of graphs'])))
-              final = (1 - (float(data['info']['Number of clusters']) /
+              # % reduced (skip traces with no races)
+              if not int(data['info']['Number of graphs']) == 0:
+                line = ""
+                line += "%s," % app
+                line += "%s," % topology
+                line += "%s," % controller
+                line += "%s," % steps
+                line += "%d," % data['info']['Number of graphs']
+                line += "%d," % data['clustering']['info']['Number of clusters after iso']
+                line += "%d," % data['info']['Number of clusters']
+                iso = (1 - (float(data['clustering']['info']['Number of clusters after iso']) /
                             float(data['info']['Number of graphs'])))
-              line += "%f," % iso
-              line += "%f\n" % final
-              with open(self.reduce_file, 'a+') as f:
-                f.write(line)
+                final = (1 - (float(data['info']['Number of clusters']) /
+                              float(data['info']['Number of graphs'])))
+                line += "%f," % iso
+                line += "%f\n" % final
+                with open(self.reduce_file, 'a+') as f:
+                  f.write(line)
 
     # Mean
     with open(self.median_file, 'w') as f:
