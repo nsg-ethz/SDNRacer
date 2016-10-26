@@ -2,6 +2,7 @@ import argparse
 import os
 import json
 import re
+import sys
 
 import numpy as np
 
@@ -33,7 +34,8 @@ class Evaluation:
     # Prepare evaluation Text File
     self.file = os.path.join(self.evaldir, 'eval_all.csv')
     self.median_file = os.path.join(self.evaldir, 'eval_median.csv')
-    self.paper_file = os.path.join(self.evaldir, 'paper.csv')
+    self.timing_file = os.path.join(self.evaldir, 'eval_timing.csv')
+    self.reduce_file = os.path.join(self.evaldir, 'eval_reduce.csv')
 
     # Rename dictionary (change names for table)
     self.r_dict = {'BinaryLeafTreeTopology': 'BinTree',
@@ -59,96 +61,144 @@ class Evaluation:
 
     print "Write Output"
 
-    # Write eval file
+    # All traces
     with open(self.file, 'w') as f:
       f.write("App,Topology,Controller,Steps,iter,# Events,# Races,# Isomorphic Clusters,# Final Clusters,"
               "Total Time,Hb_Graph,Preprocess hb_graph,Subgraphs,Init Clusters,Distance Matrix,Clustering\n")
-      # Clustering information
-      for app in sorted(self.eval_dicts.keys()):
-        if app not in self.median:
-          self.median[app] = {}
-        for topology in sorted(self.eval_dicts[app].keys()):
-          if topology not in self.median[app]:
-            self.median[app][topology] = {}
-          for controller in sorted(self.eval_dicts[app][topology].keys()):
-            if controller not in self.median[app][topology]:
-              self.median[app][topology][controller] = {}
-            for steps in sorted(self.eval_dicts[app][topology][controller].keys()):
-              if steps not in self.median[app][topology][controller]:
-                self.median[app][topology][controller][steps] = {'n_events': [],
-                                                                 'n_graphs': [],
-                                                                 'n_iso': [],
-                                                                 'n_iso_timeout': [],
-                                                                 'n_iso_total': [],
-                                                                 'n_final': [],
-                                                                 'n_gpc': [],           # Number of graphs per clusters
-                                                                 't_t': [],
-                                                                 't_hb': [],
-                                                                 't_sim': [],
-                                                                 'num': 0}
 
-              for i, data in sorted(self.eval_dicts[app][topology][controller][steps].iteritems()):
-                # Add data for median
-                self.median[app][topology][controller][steps]['num'] += 1
-                self.median[app][topology][controller][steps]['n_events'].append(int(data['info']['Number of events']))
-                self.median[app][topology][controller][steps]['n_graphs'].append(data['info']['Number of graphs'])
-                self.median[app][topology][controller][steps]['n_iso'].append(
-                    data['clustering']['info']['Number of clusters after iso'])
-                self.median[app][topology][controller][steps]['n_iso_timeout'].append(
-                    data['clustering']['iso init timeout'])
-                self.median[app][topology][controller][steps]['n_iso_total'].append(
-                    data['clustering']['iso init total'])
-                self.median[app][topology][controller][steps]['n_final'].append(data['info']['Number of clusters'])
-                self.median[app][topology][controller][steps]['t_t'].append(data['time']['total'])
-                self.median[app][topology][controller][steps]['t_hb'].append(data['time']['hb_graph'])
-                if data['sim_time'] is not None:
-                  self.median[app][topology][controller][steps]['t_sim'].append(data['sim_time'])
+    with open(self.timing_file, 'w') as f:
+      # Timing (for graph)
+      f.write("app,topology,controller,steps,total,sts,sdnracer,bigbug\n")
 
-                clust_num = 0
-                while True:
-                  c_str = 'Cluster %d' % clust_num
-                  if c_str in data:
-                    self.median[app][topology][controller][steps]['n_gpc'].append(data[c_str]['Number of graphs'])
-                  else:
-                    break
-                  clust_num += 1
+    with open(self.reduce_file, 'w') as f:
+      # % reduced (for graph)
+      f.write("app,topology,controller,steps,n_races,n_iso,n_final,p_iso,p_final\n")
 
-                # Generate output
-                line = ""
-                line += "%s," % app
-                line += "%s," % topology
-                line += "%s," % controller
-                line += "%s," % steps
-                line += "%s," % i
-                line += "%s," % data['info']['Number of events']
-                line += "%s," % data['info']['Number of graphs']
-                line += "%s," % data['clustering']['info']['Number of clusters after iso']
-                line += "%s," % data['info']['Number of clusters']
-                line += "%.3f s," % data['time']['total']
-                line += "%.3f s," % data['time']['hb_graph']
-                line += "%.3f s," % data['preprocessor']['time']['Total']
-                line += "%.3f s," % data['subgraph']['time']['Total']
-                line += "%.3f s," % data['clustering']['time']['Initialize cluster']
-                line += "%.3f s," % data['clustering']['time']['Calculate distance matrix']
-                line += "%.3f s," % \
-                        (data['clustering']['time']['Calculate clustering'] +
-                         data['clustering']['time']['Assign new clusters'])
-                if data['sim_time'] is not None:
-                  line += "%.3f s" % data['sim_time']
+
+    # Clustering information
+    for app in sorted(self.eval_dicts.keys()):
+      if app not in self.median:
+        self.median[app] = {}
+      for topology in sorted(self.eval_dicts[app].keys()):
+        if topology not in self.median[app]:
+          self.median[app][topology] = {}
+        for controller in sorted(self.eval_dicts[app][topology].keys()):
+          if controller not in self.median[app][topology]:
+            self.median[app][topology][controller] = {}
+          for steps in sorted(self.eval_dicts[app][topology][controller].keys()):
+            if steps not in self.median[app][topology][controller]:
+              self.median[app][topology][controller][steps] = {'n_events': [],
+                                                               'n_graphs': [],
+                                                               'n_iso': [],
+                                                               'n_iso_timeout': [],
+                                                               'n_iso_total': [],
+                                                               'n_final': [],
+                                                               'n_gpc': [],           # Number of graphs per clusters
+                                                               't_t': [],
+                                                               't_hb': [],
+                                                               't_sim': [],
+                                                               'num': 0}
+
+            for i, data in sorted(self.eval_dicts[app][topology][controller][steps].iteritems()):
+              # Add data for median
+              self.median[app][topology][controller][steps]['num'] += 1
+              self.median[app][topology][controller][steps]['n_events'].append(int(data['info']['Number of events']))
+              self.median[app][topology][controller][steps]['n_graphs'].append(data['info']['Number of graphs'])
+              self.median[app][topology][controller][steps]['n_iso'].append(
+                  data['clustering']['info']['Number of clusters after iso'])
+              self.median[app][topology][controller][steps]['n_iso_timeout'].append(
+                  data['clustering']['iso init timeout'])
+              self.median[app][topology][controller][steps]['n_iso_total'].append(
+                  data['clustering']['iso init total'])
+              self.median[app][topology][controller][steps]['n_final'].append(data['info']['Number of clusters'])
+              self.median[app][topology][controller][steps]['t_t'].append(data['time']['total'])
+              self.median[app][topology][controller][steps]['t_hb'].append(data['time']['hb_graph'])
+              if data['sim_time'] is not None:
+                self.median[app][topology][controller][steps]['t_sim'].append(data['sim_time'])
+
+              clust_num = 0
+              while True:
+                c_str = 'Cluster %d' % clust_num
+                if c_str in data:
+                  self.median[app][topology][controller][steps]['n_gpc'].append(data[c_str]['Number of graphs'])
                 else:
-                  line += "N/A"
-                line += "\n"
+                  break
+                clust_num += 1
+
+              # Generate output
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s," % steps
+              line += "%s," % i
+              line += "%s," % data['info']['Number of events']
+              line += "%s," % data['info']['Number of graphs']
+              line += "%s," % data['clustering']['info']['Number of clusters after iso']
+              line += "%s," % data['info']['Number of clusters']
+              line += "%.3f s," % data['time']['total']
+              line += "%.3f s," % data['time']['hb_graph']
+              line += "%.3f s," % data['preprocessor']['time']['Total']
+              line += "%.3f s," % data['subgraph']['time']['Total']
+              line += "%.3f s," % data['clustering']['time']['Initialize cluster']
+              line += "%.3f s," % data['clustering']['time']['Calculate distance matrix']
+              line += "%.3f s," % \
+                      (data['clustering']['time']['Calculate clustering'] +
+                       data['clustering']['time']['Assign new clusters'])
+              if data['sim_time'] is not None:
+                line += "%.3f s" % data['sim_time']
+              else:
+                line += "N/A"
+              line += "\n"
+
+              with open(self.file, 'a+') as f:
                 f.write(line)
 
+              # Timing
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s," % steps
+              if data['sim_time'] is not None:
+                line += "%f," % data['sim_time']
+                line += "%f," % (data['sim_time'] + data['time']['total'])
+              else:
+                line += ",,"
+              line += "%f," % data['time']['hb_graph']
+              line += "%f\n" % (data['time']['total'] - data['time']['hb_graph'])
+              with open(self.timing_file, 'a+') as f:
+                f.write(line)
+
+              # % reduced
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s," % steps
+              line += "%d," % data['info']['Number of graphs']
+              line += "%d," % data['clustering']['info']['Number of clusters after iso']
+              line += "%d," % data['info']['Number of clusters']
+              iso = (1 - (float(data['clustering']['info']['Number of clusters after iso']) /
+                          float(data['info']['Number of graphs'])))
+              final = (1 - (float(data['info']['Number of clusters']) /
+                            float(data['info']['Number of graphs'])))
+              line += "%f," % iso
+              line += "%f\n" % final
+              with open(self.reduce_file, 'a+') as f:
+                f.write(line)
+
+    # Mean
     with open(self.median_file, 'w') as f:
-      # Average
       f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,,Timing,,,,,\n")
       f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
               "Final Clusters,,Mean,s.d.,,Total,STS,SDNRacer,BigBug\n")
+
       for app in sorted(self.median.keys()):
         for topology in sorted(self.median[app].keys()):
           for controller in sorted(self.median[app][topology].keys()):
             for steps in self.exp_steps:
+
               # Trace Info
               line = ""
               line += "%s," % app
@@ -163,8 +213,8 @@ class Evaluation:
                 line += "%d,," % round(np.median(data['n_graphs']))
                 # BigBug Info
                 line += "%.d (%.2f %%)," % (round(np.median(data['n_iso'])),
-                                             round(float(np.median(data['n_iso'])) /
-                                             float(np.median(data['n_graphs'])) * 100, 2))
+                                            round(float(np.median(data['n_iso'])) /
+                                            float(np.median(data['n_graphs'])) * 100, 2))
                 if np.median(data['n_iso_total']) == 0:
                   assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
                   line += "0 (0.00 %),"
@@ -197,7 +247,7 @@ class Evaluation:
 
                 line += "\n"
               else:
-                # Fill line with N/A if no data is available
+                # Fill  line with N/A if no data is available
                 line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A,N/A\n"
 
               f.write(line)
