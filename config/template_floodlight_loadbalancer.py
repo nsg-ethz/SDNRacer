@@ -64,7 +64,7 @@ simulation_config = SimulationConfig(controller_configs=controllers,
 
 control_flow = Fuzzer(simulation_config,
                       input_logger=InputLogger(),
-                      initialization_rounds=30,
+                      initialization_rounds=50,
                       random_seed=seed,
                       send_all_to_all=True,  # needs to be True otherwise loadbalancer will throw errors.
                       check_interval=10,

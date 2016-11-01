@@ -36,6 +36,7 @@ class Evaluation:
     self.median_file = os.path.join(self.evaldir, 'eval_median.csv')
     self.timing_file = os.path.join(self.evaldir, 'eval_timing.csv')
     self.reduce_file = os.path.join(self.evaldir, 'eval_reduce.csv')
+    self.paper_file = os.path.join(self.evaldir, 'eval_paper.csv')
 
     # Rename dictionary (change names for table)
     self.r_dict = {'BinaryLeafTreeTopology': 'BinTree',
@@ -50,7 +51,7 @@ class Evaluation:
                    '_fixed': ' Fx'}
 
     # Expected simulations number of steps
-    self.exp_steps = [200, 400, 600, 800, 1000]
+    self.exp_steps = [200] #, 400, 600, 800, 1000]
 
   def run(self):
 
@@ -193,7 +194,7 @@ class Evaluation:
     with open(self.median_file, 'w') as f:
       f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,,Timing,,,,,\n")
       f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
-              "Final Clusters,,Mean,s.d.,,Total,STS,SDNRacer,BigBug\n")
+              "Final Clusters,,Mean,Max,,Total,SDNRacer,BigBug\n")
 
       for app in sorted(self.median.keys()):
         for topology in sorted(self.median[app].keys()):
@@ -228,21 +229,14 @@ class Evaluation:
                                             float(np.median(data['n_graphs'])) * 100, 2))
                 # Graphs per Cluster
                 line += "%.2f," % round(np.median(data['n_gpc']), 2)
-                line += "%.2f,," % round(np.std(data['n_gpc']), 2)
+                line += "%.2f,," % max(data['n_gpc'])
 
                 # Timing Info
                 tot = float(np.median(data['t_t']))
                 sdnracer = float(np.median(data['t_hb']))
                 bigbug = tot - sdnracer
-                if data['t_sim']:
-                  sim = float(np.median(data['t_sim']))
-                  tot += sim
 
-                  line += "%.3f s," % round(tot, 3)
-                  line += "%.3f s," % round(sim, 3)
-                else:
-                  line += "N/A,N/A,"
-
+                line += "%.3f s," % round(tot, 3)
                 line += "%.3f s," % round(sdnracer, 3)
                 line += "%.3f s" % round(bigbug, 3)
 
@@ -348,9 +342,9 @@ if __name__ == '__main__':
   empty_delta = 1000000
   parser = argparse.ArgumentParser()
   parser.add_argument('eval_folder', help='Path to evaluation file produced by reduce.py (normally eval.json)')
-  parser.add_argument('sim_log', help='Path to the simulation log file (optional)', default=None)
+  #parser.add_argument('sim_log', help='Path to the simulation log file (optional)', default=None)
 
   args = parser.parse_args()
 
-  evaluation = Evaluation(args.eval_folder, args.sim_log)
+  evaluation = Evaluation(args.eval_folder, None)
   evaluation.run()

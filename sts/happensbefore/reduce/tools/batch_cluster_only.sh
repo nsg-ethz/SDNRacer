@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=3         # Maximum number of jobs
+m_jobs=8         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -34,10 +34,10 @@ function check_jobs {
 
 
 # Process the following number of steps
-steps[0]="1000"
-#steps[1]="400"
-#steps[2]="600"
-#steps[3]="800"
+steps[0]="200"
+steps[1]="400"
+steps[2]="600"
+steps[3]="800"
 #steps[4]="1000"
 
 
@@ -63,10 +63,10 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"loadbalancer-"* ]] ; then
+        elif [[ $folder != *"loadbalancer-Star"* ]] ; then
             continue
 
-        elif [[ $folder != *"BinaryLeaf"* ]] ; then
+        elif [[ $folder != *""* ]] ; then
             continue
 
         else

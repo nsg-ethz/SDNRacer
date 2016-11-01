@@ -63,7 +63,7 @@ simulation_config = SimulationConfig(controller_configs=controllers,
 
 control_flow = Fuzzer(simulation_config,
                       input_logger=InputLogger(),
-                      initialization_rounds=100,
+                      initialization_rounds=50,
                       random_seed=seed,
                       send_all_to_all=False,
                       check_interval=10,
