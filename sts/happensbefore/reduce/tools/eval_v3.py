@@ -94,7 +94,8 @@ class Evaluation:
                                                                'n_iso_timeout': [],
                                                                'n_iso_total': [],
                                                                'n_final': [],
-                                                               'n_gpc': [],           # Number of graphs per clusters
+                                                               'n_gpc_max': [],  # Number of graphs per clusters (max)
+                                                               'n_gpc_med': [],  # Number of graphs (median)
                                                                't_t': [],
                                                                't_hb': [],
                                                                't_sim': [],
@@ -127,7 +128,7 @@ class Evaluation:
                 else:
                   break
                 clust_num += 1
-              self.median[app][topology][controller][steps]['n_gpc'].extend(data[c_str]['Number of graphs'])
+              self.median[app][topology][controller][steps]['n_gpc_max'].append(max(cluster_lengths))
               self.median[app][topology][controller][steps]['n_gpc_med'].append(np.median(cluster_lengths))
 
               # Generate output
