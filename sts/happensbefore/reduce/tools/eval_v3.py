@@ -33,10 +33,10 @@ class Evaluation:
 
     # Prepare evaluation Text File
     self.file = os.path.join(self.evaldir, 'eval_all.csv')
-    self.median_file = os.path.join(self.evaldir, 'eval_median.csv')
+    self.median_file = os.path.join(self.evaldir, 'table_full.csv')
     self.timing_file = os.path.join(self.evaldir, 'eval_timing.csv')
     self.reduce_file = os.path.join(self.evaldir, 'eval_reduce.csv')
-    self.paper_file = os.path.join(self.evaldir, 'eval_paper.csv')
+    self.paper_file = os.path.join(self.evaldir, 'table_paper.csv')
 
     # Rename dictionary (change names for table)
     self.r_dict = {'BinaryLeafTreeTopology': 'BinTree',
@@ -118,13 +118,17 @@ class Evaluation:
                 self.median[app][topology][controller][steps]['t_sim'].append(data['sim_time'])
 
               clust_num = 0
+              cluster_lengths = []
               while True:
                 c_str = 'Cluster %d' % clust_num
                 if c_str in data:
-                  self.median[app][topology][controller][steps]['n_gpc'].append(data[c_str]['Number of graphs'])
+                  cluster_lengths.append(int(data[c_str]['Number of graphs']))
+
                 else:
                   break
                 clust_num += 1
+              self.median[app][topology][controller][steps]['n_gpc'].extend(data[c_str]['Number of graphs'])
+              self.median[app][topology][controller][steps]['n_gpc_med'].append(np.median(cluster_lengths))
 
               # Generate output
               line = ""
@@ -194,7 +198,7 @@ class Evaluation:
     with open(self.median_file, 'w') as f:
       f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,,Timing,,,,,\n")
       f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
-              "Final Clusters,,Mean,Max,,Total,SDNRacer,BigBug\n")
+              "Final Clusters,,Median,Max,,Total,SDNRacer,BigBug\n")
 
       for app in sorted(self.median.keys()):
         for topology in sorted(self.median[app].keys()):
@@ -228,8 +232,8 @@ class Evaluation:
                                             round(float(np.median(data['n_final'])) /
                                             float(np.median(data['n_graphs'])) * 100, 2))
                 # Graphs per Cluster
-                line += "%.2f," % round(np.median(data['n_gpc']), 2)
-                line += "%.2f,," % max(data['n_gpc'])
+                line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
+                line += "%.2f,," % max(data['n_gpc_med'])
 
                 # Timing Info
                 tot = float(np.median(data['t_t']))
@@ -243,7 +247,57 @@ class Evaluation:
                 line += "\n"
               else:
                 # Fill  line with N/A if no data is available
-                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A,N/A\n"
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"
+
+              f.write(line)
+
+    # Export table for paper
+    with open(self.median_file, 'w') as f:
+      f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,\n")
+      f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
+              "Final Clusters,,Median\n")
+
+      for app in sorted(self.median.keys()):
+        for topology in sorted(self.median[app].keys()):
+          if topology != 'BinTree':
+            continue
+          for controller in sorted(self.median[app][topology].keys()):
+            for steps in [200]:
+
+              # Trace Info
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s,," % steps
+
+              if steps in self.median[app][topology][controller]:
+                data = self.median[app][topology][controller][steps]
+                # SDNRacer Info
+                line += "%d," % round(np.median(data['n_events']))
+                line += "%d,," % round(np.median(data['n_graphs']))
+                # BigBug Info
+                line += "%.d (%.2f %%)," % (round(np.median(data['n_iso'])),
+                                            round(float(np.median(data['n_iso'])) /
+                                                  float(np.median(data['n_graphs'])) * 100, 2))
+                if np.median(data['n_iso_total']) == 0:
+                  assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
+                  line += "0 (0.00 %),"
+                else:
+                  line += "%d (%.2f %%)," % (round(np.median(data['n_iso_timeout'])),
+                                             round(float(np.median(data['n_iso_timeout'])) /
+                                                   float(np.median(data['n_iso_total'])) * 100, 2))
+                line += "%d (%.2f %%),," % (round(np.median(data['n_final'])),
+                                            round(float(np.median(data['n_final'])) /
+                                                  float(np.median(data['n_graphs'])) * 100, 2))
+                # Graphs per Cluster
+                line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
+                line += "%.2f" % max(data['n_gpc_med'])
+
+                line += "\n"
+              else:
+                # Fill  line with N/A if no data is available
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A\n"
 
               f.write(line)
 
@@ -255,6 +309,10 @@ class Evaluation:
         continue
       # Skip evaluation folder
       if folder == 'evaluation':
+        continue
+
+      # skip fixed versions
+      if "_fixed" in folder:
         continue
 
       # Try to read eval file
