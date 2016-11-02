@@ -51,7 +51,8 @@ class Evaluation:
                    '_fixed': ' Fx'}
 
     # Expected simulations number of steps
-    self.exp_steps = [200, 400] #, 600, 800, 1000]
+    self.exp_steps = [200, 400]  # , 600, 800, 1000]
+    self.steps_paper = [200]
 
   def run(self):
 
@@ -134,7 +135,7 @@ class Evaluation:
               else:
                 self.median[app][topology][controller][steps]['n_gpc_max'].append(0)
                 self.median[app][topology][controller][steps]['n_gpc_med'].append(0)
-                
+
               # Generate output
               line = ""
               line += "%s," % app
@@ -238,7 +239,7 @@ class Evaluation:
                                             float(np.median(data['n_graphs'])) * 100, 2))
                 # Graphs per Cluster
                 line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
-                line += "%.2f,," % max(data['n_gpc_med'])
+                line += "%.2f,," % round(np.median(data['n_gpc_max']), 2)
 
                 # Timing Info
                 tot = float(np.median(data['t_t']))
@@ -257,17 +258,17 @@ class Evaluation:
               f.write(line)
 
     # Export table for paper
-    with open(self.median_file, 'w') as f:
+    with open(self.paper_file, 'w') as f:
       f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,\n")
       f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
-              "Final Clusters,,Median\n")
+              "Final Clusters,,Median,Max\n")
 
       for app in sorted(self.median.keys()):
         for topology in sorted(self.median[app].keys()):
           if topology != 'BinTree':
             continue
           for controller in sorted(self.median[app][topology].keys()):
-            for steps in [200]:
+            for steps in self.steps_paper:
 
               # Trace Info
               line = ""
@@ -297,7 +298,7 @@ class Evaluation:
                                                   float(np.median(data['n_graphs'])) * 100, 2))
                 # Graphs per Cluster
                 line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
-                line += "%.2f" % max(data['n_gpc_med'])
+                line += "%.2f" % round(np.median(data['n_gpc_max']), 2)
 
                 line += "\n"
               else:
