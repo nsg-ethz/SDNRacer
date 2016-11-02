@@ -34,10 +34,10 @@ function check_jobs {
 
 
 # Process the following number of steps
-steps[0]="200"
-steps[1]="400"
-steps[2]="600"
-steps[3]="800"
+steps[0]="400"
+#steps[1]="400"
+#steps[2]="600"
+#steps[3]="800"
 #steps[4]="1000"
 
 
@@ -63,7 +63,7 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"loadbalancer-Star"* ]] ; then
+        elif [[ $folder == *"loadbalancer-Binary"* ]] ; then
             continue
 
         elif [[ $folder != *""* ]] ; then
