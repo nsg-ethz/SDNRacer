@@ -128,9 +128,13 @@ class Evaluation:
                 else:
                   break
                 clust_num += 1
-              self.median[app][topology][controller][steps]['n_gpc_max'].append(max(cluster_lengths))
-              self.median[app][topology][controller][steps]['n_gpc_med'].append(np.median(cluster_lengths))
-
+              if cluster_lengths:
+                self.median[app][topology][controller][steps]['n_gpc_max'].append(max(cluster_lengths))
+                self.median[app][topology][controller][steps]['n_gpc_med'].append(np.median(cluster_lengths))
+              else:
+                self.median[app][topology][controller][steps]['n_gpc_max'].append(0)
+                self.median[app][topology][controller][steps]['n_gpc_med'].append(0)
+                
               # Generate output
               line = ""
               line += "%s," % app
