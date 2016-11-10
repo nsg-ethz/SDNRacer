@@ -24,7 +24,7 @@ topology[1]="MeshTopology"
 topology[2]="BinaryLeafTreeTopology"
 
 # Steps
-steps[0]="600"
+steps[0]="800"
 #steps[1]="400"
 #steps[2]="600"
 #steps[3]="800"
