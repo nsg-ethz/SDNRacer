@@ -51,7 +51,7 @@ class Evaluation:
                    '_fixed': ' Fx'}
 
     # Expected simulations number of steps
-    self.exp_steps = [200, 400]  # , 600, 800, 1000]
+    self.exp_steps = [200, 400, 600, 800, 1000]
     self.steps_paper = [200]
 
   def run(self):
