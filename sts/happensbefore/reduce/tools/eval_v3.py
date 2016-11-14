@@ -317,10 +317,6 @@ class Evaluation:
       if folder == 'evaluation':
         continue
 
-      # skip fixed versions
-      if "_fixed" in folder:
-        continue
-
       # Try to read eval file
       eval_file = os.path.join(self.eval_folder, *[folder, 'reduce', 'eval.json'])
       try:
