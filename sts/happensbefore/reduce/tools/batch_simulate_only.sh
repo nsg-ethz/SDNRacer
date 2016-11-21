@@ -8,7 +8,7 @@
 iter=15
 
 # Controller & Module
-#controller[0]="floodlight_loadbalancer"
+controller[0]="floodlight_loadbalancer"
 #controller[1]="floodlight_loadbalancer_fixed"
 #controller[2]="floodlight_learningswitch"
 #controller[3]="pox_eel_learningswitch"
@@ -16,12 +16,12 @@ iter=15
 #controller[5]="pox_eel_l2_multi_fixed"
 #controller[6]="floodlight_circuitpusher"
 #controller[7]="floodlight_forwarding"
-controller[0]="floodlight_firewall"
+#controller[0]="floodlight_firewall"
 
 # Topologies
 topology[0]="StarTopology"
 topology[1]="MeshTopology"
-topology[2]="BinaryLeafTreeTopology"
+#topology[2]="BinaryLeafTreeTopology"
 
 # Steps
 steps[0]="1000"
@@ -48,7 +48,7 @@ fi
 
 batch_log="${res_dir}/simulation.log"
 
-i=0
+i=14
 while [[ $i -lt $iter ]];
 do
     echo "Iteration ${i}"

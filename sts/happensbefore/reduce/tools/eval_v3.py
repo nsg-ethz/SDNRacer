@@ -253,20 +253,20 @@ class Evaluation:
                 line += "\n"
               else:
                 # Fill  line with N/A if no data is available
-                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
 
               f.write(line)
 
     # Export table for paper
     with open(self.paper_file, 'w') as f:
       f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,\n")
-      f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
+      f.write("App,Topology,Controller,,Events,Races,,Isomorphic Clusters,Timeouts,"
               "Final Clusters,,Median,Max\n")
 
       for app in sorted(self.median.keys()):
         for topology in sorted(self.median[app].keys()):
-          if topology != 'BinTree':
-            continue
+          # if topology != 'BinTree':
+          #  continue
           for controller in sorted(self.median[app][topology].keys()):
             for steps in self.steps_paper:
 
@@ -274,8 +274,7 @@ class Evaluation:
               line = ""
               line += "%s," % app
               line += "%s," % topology
-              line += "%s," % controller
-              line += "%s,," % steps
+              line += "%s,," % controller
 
               if steps in self.median[app][topology][controller]:
                 data = self.median[app][topology][controller][steps]
