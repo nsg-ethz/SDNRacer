@@ -4,7 +4,7 @@
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=2         # Maximum number of jobs
+m_jobs=3         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
@@ -63,7 +63,7 @@ for s in "${steps[@]}" ; do
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder == *"loadbalancer-Binary"* ]] ; then
+        elif [[ $folder != *"loadbalancer-Binary"* ]] ; then
             continue
 
         elif [[ $folder != *""* ]] ; then
