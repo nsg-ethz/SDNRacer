@@ -1,0 +1,18 @@
+Floodlight Load Balancer fix:
+
+To use the fix for the Floodlight Load Balancer module, first clone Floodlight and replace two files:
+
+1. Clone Floodlight:
+        git clone https://github.com/jmiserez/floodlight.git
+        git checkout hb
+
+3. Rename folder:
+        mv floodlight floodlight_fixed
+        
+2. Replace the following files with the two files in this folder:
+        src/main/java/net/floodlightcontroller/core/internal/OFChannelHandler.java
+        src/main/java/net/floodlightcontroller/loadbalancer/LoadBalancer.java
+
+3. Compile Floodlight
+        ant
+
