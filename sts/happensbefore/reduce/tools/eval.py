@@ -216,15 +216,15 @@ class Evaluation:
         for topology in sorted(self.median[app].keys()):
           for controller in sorted(self.median[app][topology].keys()):
             for steps in self.exp_steps:
-
-              # Trace Info
-              line = ""
-              line += "%s," % app
-              line += "%s," % topology
-              line += "%s," % controller
-              line += "%s,," % steps
-
               if steps in self.median[app][topology][controller]:
+                # Trace Info
+                line = ""
+                line += "%s," % app
+                line += "%s," % topology
+                line += "%s," % controller
+                line += "%s,," % steps
+
+
                 data = self.median[app][topology][controller][steps]
                 # SDNRacer Info
                 line += "%d," % round(np.median(data['n_events']))
@@ -260,7 +260,12 @@ class Evaluation:
               else:
                 # Fill  line with N/A if no data is available
                 if self.print_na:
-                  line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
+                  line = ""
+                  line += "%s," % app
+                  line += "%s," % topology
+                  line += "%s," % controller
+                  line += "%s,," % steps
+                  line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"
 
               f.write(line)
 
