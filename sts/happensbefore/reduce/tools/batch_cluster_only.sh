@@ -69,12 +69,12 @@ for s in "${steps[@]}" ; do
             continue
 
         # Exclude folders with following substring
-        elif [[ $folder == *"loadbalancer-Binary"* ]] ; then
-            continue
+        #elif [[ $folder == *""* ]] ; then
+        #    continue
 
         # Only proces foldernames containing following substring
-        elif [[ $folder != *""* ]] ; then
-            continue
+        #elif [[ $folder != *""* ]] ; then
+        #    continue
 
         else
             echo "$(date +"%D %T"): Cluster ${folder}"

@@ -27,15 +27,15 @@ controller[0]="floodlight_firewall"
 
 # Topologies
 topology[0]="StarTopology"
-topology[1]="MeshTopology"
-topology[2]="BinaryLeafTreeTopology"
+#topology[1]="MeshTopology"
+#topology[2]="BinaryLeafTreeTopology"
 
 # Steps
 steps[0]="200"
-steps[1]="400"
-steps[2]="600"
-steps[3]="800"
-steps[4]="1000"
+#steps[1]="400"
+#steps[2]="600"
+#steps[3]="800"
+#steps[4]="1000"
 
 ############################################
 exp_num=0
@@ -55,7 +55,9 @@ fi
 
 batch_log="${res_dir}/simulation.log"
 
-i=14
+i=0
+echo $iter
+echo $i
 while [[ $i -lt $iter ]];
 do
     echo "Iteration ${i}"
