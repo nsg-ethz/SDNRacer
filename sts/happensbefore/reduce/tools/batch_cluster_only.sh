@@ -4,12 +4,14 @@
 
 # Arguments: path to folder where the trace subfolders are saved
 
+# Use the variable m_jobs to change the maximal number of parallel processes
+
 
 #####################################
 # Clustering Only
 ############################################
 # Multiprocessing variables and functions
-m_jobs=3         # Maximum number of jobs
+m_jobs=1         # Maximum number of jobs
 jobs=""          # process ids
 n_jobs=0         # Number of processes
 
