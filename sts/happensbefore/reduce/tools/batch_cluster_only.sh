@@ -81,7 +81,7 @@ for s in "${steps[@]}" ; do
         else
             echo "$(date +"%D %T"): Cluster ${folder}"
 
-            red="${folder%/*}/${folder##*/}_red.txt"
+            red="${folder%/*}/${folder##*/}bigbug.log"
             ./sts/happensbefore/reduce/reduce.py "${folder}/hb.json" >> $red 2>&1 &
             jobs="$jobs $!"
             n_jobs=$(($n_jobs + 1))
