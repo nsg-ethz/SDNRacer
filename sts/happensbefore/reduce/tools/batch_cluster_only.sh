@@ -50,7 +50,7 @@ steps[4]="1000"
 
 # Check if file parameter is submitted and points to a file
 if [[ -z $1 ]] ; then
-    echo "Missing parameter: Path to simulation.log file" >&2
+    echo "Missing parameter: Result folder path missing" >&2
     exit 1
 else
     if [[ ! -d $1 ]] ; then
