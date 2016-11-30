@@ -56,6 +56,7 @@ class Evaluation:
                    '_fixed': ' Fx'}
 
     # Expected simulations number of steps
+    self.print_na = False
     self.exp_steps = [200, 400, 600, 800, 1000]
     self.steps_paper = [200]
 
@@ -258,7 +259,8 @@ class Evaluation:
                 line += "\n"
               else:
                 # Fill  line with N/A if no data is available
-                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
+                if self.print_na:
+                  line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
 
               f.write(line)
 
