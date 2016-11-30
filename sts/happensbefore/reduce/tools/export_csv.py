@@ -1,3 +1,8 @@
+
+"""
+Export csv file used by motivation_graph.R for creating the motivation_graph in the report (and SOSR paper).
+"""
+
 import argparse
 import os
 import shutil

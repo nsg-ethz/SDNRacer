@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# Script to run bigbug on multiple traces. Used to cluster traces produced with "batch_simulate_only.sh"
+
+# Arguments: path to folder where the trace subfolders are saved
+
+
 #####################################
 # Clustering Only
 ############################################
@@ -33,12 +38,12 @@ function check_jobs {
 ############################################
 
 
-# Process the following number of steps
-steps[0]="1000"
-#steps[1]="400"
-#steps[2]="600"
-#steps[3]="800"
-#steps[4]="1000"
+# Only process traces with the following number of steps
+steps[0]="200"
+steps[1]="400"
+steps[2]="600"
+steps[3]="800"
+steps[4]="1000"
 
 
 # Check if file parameter is submitted and points to a file
@@ -59,13 +64,15 @@ for s in "${steps[@]}" ; do
             echo "Skip ${folder}"
             continue
 
-        # Process only one stepsize in this iteration
+        # Process only one trace length in this iteration
         elif [[ $folder != *"$s"* ]] ; then
             continue
 
-        elif [[ $folder != *"loadbalancer-Binary"* ]] ; then
+        # Exclude folders with following substring
+        elif [[ $folder == *"loadbalancer-Binary"* ]] ; then
             continue
 
+        # Only proces foldernames containing following substring
         elif [[ $folder != *""* ]] ; then
             continue
 

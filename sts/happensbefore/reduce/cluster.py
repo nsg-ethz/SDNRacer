@@ -6,6 +6,9 @@ logger = logging.getLogger(__name__)
 
 
 class Cluster:
+  """
+  Class to store clusters.
+  """
   _ids = itertools.count(0)
 
   def __init__(self, graphs=[]):
@@ -15,7 +18,7 @@ class Cluster:
     self.write_ids = []             # List of all ids of write-race-events
     self.common_writes = 0          # Percentage of graphs containing a common write event with another graph
 
-    self.properties = {             # Properties for "relation functions"
+    self.properties = {             # Cluster Features
         'pingpong': 0,              # Percentage of graphs containing a controller-switch-pingpong
         'return': 0,                # Percentage of races on the return path (contain HbHostHandle and HbHostSend)
         'flowexpiry': 0,            # Percentage of graphs origin from flowexpiry
@@ -42,7 +45,7 @@ class Cluster:
     return
 
   def get_properties(self):
-    """ Calculates all properties. For a list of the properties see the init function."""
+    """ Calculates the features of the cluster (mean of all graphs)"""
 
     # Return path
     self.properties['return'] = len([g for g in self.graphs if g.graph['return']]) / float(len(self.graphs))
@@ -96,9 +99,8 @@ class Cluster:
 
   def get_representative(self):
     """
-    Sets representative graph based on the cluster properties.
+    Ranking function. Finds the most representative graph of the cluster.
     """
-    # TODO Update this function to check the new features
     # Get graph  properties
     pingpong = True if self.properties['pingpong'] >= 0.5 else False
     ret = True if self.properties['return'] >= 0.5 else False
@@ -150,13 +152,19 @@ class Cluster:
 
     candidates = new_candidates
 
-    # Take the graph with the smallest number of nodes
+    # Use the graph with the smallest number of nodes
     candidates.sort(key=len)
 
     assert len(candidates) > 0, 'No graphs in candidate list'
     self.representative = candidates[0]
 
   def __str__(self):
+      """
+      Creates string that contains information about the clusters (# graphs, features, etc.)
+
+      Returns: Info string
+
+      """
       s = 'Cluster %s\n' % self.id
       s += "\t%-20s: %s\n" % ("Number of graphs", len(self.graphs))
       s += "\t%-20s:\n" % "Properties"

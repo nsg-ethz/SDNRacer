@@ -18,9 +18,9 @@ class Clustering:
     Class to cluster the subgraphs
     """
     self.resultdir = resultdir
-    self.graphs = []
-    self.clusters = []
-    self.remaining = []
+    self.graphs = []                    # List of graphs
+    self.clusters = []                  # List of clusters
+    self.remaining = []                 # List of not clustered graphs (not used anymore, was for dbscan)
     self.eval = {'time': {},
                  'info': {},
                  'iso init total': 0}
@@ -29,9 +29,18 @@ class Clustering:
     self.t_matcher = 0
 
   def run(self, graphs, algorithm):
+    """
+    Clusters all graphs into clusters. First uses isomorphic initialization, then the clustering algorithm submitted in
+    algorithm parameter.
+
+    Args:
+      graphs:     List of graphs
+      algorithm:  Cluster algorithm object.
+
+    """
     self.graphs = graphs
 
-    # Initialize clusters
+    # Initialize clusters with isomorphic graphs.
     tstart = time.clock()
     logger.debug("Initialize clusters with isomorphic graphs")
     self.initialize_clusters()
@@ -40,7 +49,7 @@ class Clustering:
 
     # Clustering
     logger.debug("Start Clustering")
-    # Check if there are more than two clusters
+    # If only one cluster is left -> exit
     if len(self.clusters) <= 1:
       logger.info("Only one cluster left after isomorphic initialization.")
       self.eval['time']['Total'] = time.clock() - tstart
@@ -48,11 +57,11 @@ class Clustering:
       algorithm.eval['time']['Calculate clustering'] = 0.0
       algorithm.eval['time']['Assign new clusters'] = 0.0
     else:
+      # Run clustering algorithm
       self.clusters, self.remaining = algorithm.run(self.clusters)
       self.write_clusters_info()
 
     # Merge Eval dicts so that only this one is needed later
-    self.eval['score'] = algorithm.eval['score']
     for k, v in algorithm.eval['time'].iteritems():
       self.eval['time'][k] = v
 
@@ -62,7 +71,8 @@ class Clustering:
 
   def initialize_clusters(self):
     """
-    Initializes the clusters: Put all isomorphic graphs in a separate cluster.
+    Cluster initialization: Put all isomorphic graphs in a separate cluster.
+    Isomorphism check currently uses hard-coded timeout of 10.
     """
     tstart = time.clock()
     logger.debug("Number of graphs: %d" % len(self.graphs))
@@ -80,7 +90,7 @@ class Clustering:
       # Check if the current graph is isomorphic with a graph from a existing group of graphs
       for group in reversed(groups):
         # Because of the odering (sorted and reversed) we can break as soon as the graph is smaller
-        # as the graphs in the current group.
+        # than the graphs in the current group.
         if len(group[0]) > len(curr_graph):
           break
         if nx.faster_could_be_isomorphic(group[0], curr_graph):
@@ -113,6 +123,7 @@ class Clustering:
     for group in groups:
       self.clusters.append(cluster.Cluster(group))
 
+    # Add the graphs that hit the timeout to separate clusters
     for graph in groups_timeout:
       self.clusters.append(cluster.Cluster(graph))
 
@@ -147,7 +158,7 @@ class Clustering:
 
   def export_clusters(self):
     """ Exports the representative graphs in the result directory and creats a folder for each group
-    to export all informative graphs in the group."""
+    to export all isomorphic graphs in the group."""
     for ind, cluster in enumerate(self.clusters):
       # Export representative graph
       nx.drawing.nx_agraph.write_dot(cluster.representative, os.path.join(self.resultdir, 'cluster_%03d.dot' % ind))
@@ -162,10 +173,10 @@ class Clustering:
         elif 'iso_cluster' in graph.graph and graph.graph['iso_cluster'] not in iso_exported:
           nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'iso_%03d.dot' % graph.graph['iso_cluster']))
           iso_exported.append(graph.graph['iso_cluster'])
-        # TODO add config option
+        # Uncomment next line to export every single graph, event isomorphic ones
         # nx.drawing.nx_agraph.write_dot(graph, os.path.join(export_path, 'graph_%03d.dot' % graph.graph['index']))
 
-    # Export outliers (remaining)
+    # Export outliers (remaining); Was used for Outliers of DBScan
     if self.remaining:
       export_path = os.path.join(self.resultdir, 'rest')
       if not os.path.exists(export_path):

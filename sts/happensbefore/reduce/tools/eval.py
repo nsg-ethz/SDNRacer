@@ -1,37 +1,328 @@
+
+"""
+Read evaluation file created by bigbug (eval.json). Export multiple csv files for the evaluation in the report.
+"""
+
 import argparse
 import os
-import shutil
 import json
 import re
+import sys
 
 import numpy as np
-import matplotlib.pyplot as plt
-
-# Parameters
-ts = 8  # Titlesize
-fs = 6  # Fontsize
-
-pltwidth = 8
-plthight = 3
 
 
 class Evaluation:
-  def __init__(self, eval_folder):
+  def __init__(self, eval_folder, sim_log=None):
 
     print "Init"
     # Check if eval file exists
     assert os.path.exists(eval_folder), 'Folder %s does not exist' % eval_folder
-
-    print eval_folder
     self.eval_folder = os.path.abspath(eval_folder)
-    print self.eval_folder
 
-    # Fetch data and store them based on controller and topology
+    if sim_log is not None:
+      assert os.path.exists(sim_log), 'Simulation log %s does not exist' % sim_log
+      self.sim_log = os.path.abspath(sim_log)
+    else:
+      self.sim_log = None
+
+    # Data dict
     self.eval_dicts = {}
-    self.num_traces = 0
-    for folder in os.listdir(eval_folder):
-      print "Load trace %s" % folder
-      eval_file = os.path.join(eval_folder, *[folder, 'reduce', 'eval.json'])
+    # Median
+    self.median = {}
+
+    # Prepare directory for results
+    self.evaldir = os.path.join(self.eval_folder, 'evaluation')
+    if not os.path.exists(self.evaldir):
+      os.makedirs(self.evaldir)
+
+    # Prepare evaluation Text File
+    self.file = os.path.join(self.evaldir, 'eval_all.csv')
+    self.median_file = os.path.join(self.evaldir, 'table_full.csv')
+    self.timing_file = os.path.join(self.evaldir, 'eval_timing.csv')
+    self.reduce_file = os.path.join(self.evaldir, 'eval_reduce.csv')
+    self.paper_file = os.path.join(self.evaldir, 'table_paper.csv')
+
+    # Rename dictionary (change names for table)
+    self.r_dict = {'BinaryLeafTreeTopology': 'BinTree',
+                   'StarTopology': 'Single',
+                   'MeshTopology': 'Linear',
+                   'circuitpusher': 'CircuitPusher',
+                   'firewall': 'Adm. Ctrl.',
+                   'loadbalancer': 'LoadBalancer',
+                   'forwarding': 'Forwarding',
+                   'l2_multi': 'Forwarding',
+                   'learningswitch': 'LearningSwitch',
+                   '_fixed': ' Fx'}
+
+    # Expected simulations number of steps
+    self.exp_steps = [200, 400, 600, 800, 1000]
+    self.steps_paper = [200]
+
+  def run(self):
+
+    # Fetch data
+    self.fetch_data()
+    if self.sim_log is not None:
+      self.fetch_simulation_time()
+
+    print "Write Output"
+
+    # All traces
+    with open(self.file, 'w') as f:
+      f.write("App,Topology,Controller,Steps,iter,# Events,# Races,# Isomorphic Clusters,# Final Clusters,"
+              "Total Time,Hb_Graph,Preprocess hb_graph,Subgraphs,Init Clusters,Distance Matrix,Clustering\n")
+
+    with open(self.timing_file, 'w') as f:
+      # Timing (for graph)
+      f.write("app,topology,controller,steps,total,sts,sdnracer,bigbug\n")
+
+    with open(self.reduce_file, 'w') as f:
+      # % reduced (for graph)
+      f.write("app,topology,controller,steps,n_races,n_iso,n_final,p_iso,p_final\n")
+
+
+    # Clustering information
+    for app in sorted(self.eval_dicts.keys()):
+      if app not in self.median:
+        self.median[app] = {}
+      for topology in sorted(self.eval_dicts[app].keys()):
+        if topology not in self.median[app]:
+          self.median[app][topology] = {}
+        for controller in sorted(self.eval_dicts[app][topology].keys()):
+          if controller not in self.median[app][topology]:
+            self.median[app][topology][controller] = {}
+          for steps in sorted(self.eval_dicts[app][topology][controller].keys()):
+            if steps not in self.median[app][topology][controller]:
+              self.median[app][topology][controller][steps] = {'n_events': [],
+                                                               'n_graphs': [],
+                                                               'n_iso': [],
+                                                               'n_iso_timeout': [],
+                                                               'n_iso_total': [],
+                                                               'n_final': [],
+                                                               'n_gpc_max': [],  # Number of graphs per clusters (max)
+                                                               'n_gpc_med': [],  # Number of graphs (median)
+                                                               't_t': [],
+                                                               't_hb': [],
+                                                               't_sim': [],
+                                                               'num': 0}
+
+            for i, data in sorted(self.eval_dicts[app][topology][controller][steps].iteritems()):
+              # Add data for median
+              self.median[app][topology][controller][steps]['num'] += 1
+              self.median[app][topology][controller][steps]['n_events'].append(int(data['info']['Number of events']))
+              self.median[app][topology][controller][steps]['n_graphs'].append(data['info']['Number of graphs'])
+              self.median[app][topology][controller][steps]['n_iso'].append(
+                  data['clustering']['info']['Number of clusters after iso'])
+              self.median[app][topology][controller][steps]['n_iso_timeout'].append(
+                  data['clustering']['iso init timeout'])
+              self.median[app][topology][controller][steps]['n_iso_total'].append(
+                  data['clustering']['iso init total'])
+              self.median[app][topology][controller][steps]['n_final'].append(data['info']['Number of clusters'])
+              self.median[app][topology][controller][steps]['t_t'].append(data['time']['total'])
+              self.median[app][topology][controller][steps]['t_hb'].append(data['time']['hb_graph'])
+              if data['sim_time'] is not None:
+                self.median[app][topology][controller][steps]['t_sim'].append(data['sim_time'])
+
+              clust_num = 0
+              cluster_lengths = []
+              while True:
+                c_str = 'Cluster %d' % clust_num
+                if c_str in data:
+                  cluster_lengths.append(int(data[c_str]['Number of graphs']))
+
+                else:
+                  break
+                clust_num += 1
+              if cluster_lengths:
+                self.median[app][topology][controller][steps]['n_gpc_max'].append(max(cluster_lengths))
+                self.median[app][topology][controller][steps]['n_gpc_med'].append(np.median(cluster_lengths))
+              else:
+                self.median[app][topology][controller][steps]['n_gpc_max'].append(0)
+                self.median[app][topology][controller][steps]['n_gpc_med'].append(0)
+
+              # Generate output
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s," % steps
+              line += "%s," % i
+              line += "%s," % data['info']['Number of events']
+              line += "%s," % data['info']['Number of graphs']
+              line += "%s," % data['clustering']['info']['Number of clusters after iso']
+              line += "%s," % data['info']['Number of clusters']
+              line += "%.3f s," % data['time']['total']
+              line += "%.3f s," % data['time']['hb_graph']
+              line += "%.3f s," % data['preprocessor']['time']['Total']
+              line += "%.3f s," % data['subgraph']['time']['Total']
+              line += "%.3f s," % data['clustering']['time']['Initialize cluster']
+              line += "%.3f s," % data['clustering']['time']['Calculate distance matrix']
+              line += "%.3f s," % \
+                      (data['clustering']['time']['Calculate clustering'] +
+                       data['clustering']['time']['Assign new clusters'])
+              if data['sim_time'] is not None:
+                line += "%.3f s" % data['sim_time']
+              else:
+                line += "N/A"
+              line += "\n"
+
+              with open(self.file, 'a+') as f:
+                f.write(line)
+
+              # Timing
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s," % steps
+              if data['sim_time'] is not None:
+                line += "%f," % data['sim_time']
+                line += "%f," % (data['sim_time'] + data['time']['total'])
+              else:
+                line += ",,"
+              line += "%f," % data['time']['hb_graph']
+              line += "%f\n" % (data['time']['total'] - data['time']['hb_graph'])
+              with open(self.timing_file, 'a+') as f:
+                f.write(line)
+
+              # % reduced (skip traces with no races)
+              if not int(data['info']['Number of graphs']) == 0:
+                line = ""
+                line += "%s," % app
+                line += "%s," % topology
+                line += "%s," % controller
+                line += "%s," % steps
+                line += "%d," % data['info']['Number of graphs']
+                line += "%d," % data['clustering']['info']['Number of clusters after iso']
+                line += "%d," % data['info']['Number of clusters']
+                iso = (1 - (float(data['clustering']['info']['Number of clusters after iso']) /
+                            float(data['info']['Number of graphs'])))
+                final = (1 - (float(data['info']['Number of clusters']) /
+                              float(data['info']['Number of graphs'])))
+                line += "%f," % iso
+                line += "%f\n" % final
+                with open(self.reduce_file, 'a+') as f:
+                  f.write(line)
+
+    # Mean
+    with open(self.median_file, 'w') as f:
+      f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,,Timing,,,,,\n")
+      f.write("App,Topology,Controller,Steps,,Events,Races,,Isomorphic Clusters,Timeouts,"
+              "Final Clusters,,Median,Max,,Total,SDNRacer,BigBug\n")
+
+      for app in sorted(self.median.keys()):
+        for topology in sorted(self.median[app].keys()):
+          for controller in sorted(self.median[app][topology].keys()):
+            for steps in self.exp_steps:
+
+              # Trace Info
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s,," % steps
+
+              if steps in self.median[app][topology][controller]:
+                data = self.median[app][topology][controller][steps]
+                # SDNRacer Info
+                line += "%d," % round(np.median(data['n_events']))
+                line += "%d,," % round(np.median(data['n_graphs']))
+                # BigBug Info
+                line += "%.d (%.2f %%)," % (round(np.median(data['n_iso'])),
+                                            round(float(np.median(data['n_iso'])) /
+                                            float(np.median(data['n_graphs'])) * 100, 2))
+                if np.median(data['n_iso_total']) == 0:
+                  assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
+                  line += "0 (0.00 %),"
+                else:
+                  line += "%d (%.2f %%)," % (round(np.median(data['n_iso_timeout'])),
+                                             round(float(np.median(data['n_iso_timeout'])) /
+                                             float(np.median(data['n_iso_total'])) * 100, 2))
+                line += "%d (%.2f %%),," % (round(np.median(data['n_final'])),
+                                            round(float(np.median(data['n_final'])) /
+                                            float(np.median(data['n_graphs'])) * 100, 2))
+                # Graphs per Cluster
+                line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
+                line += "%.2f,," % round(np.median(data['n_gpc_max']), 2)
+
+                # Timing Info
+                tot = float(np.median(data['t_t']))
+                sdnracer = float(np.median(data['t_hb']))
+                bigbug = tot - sdnracer
+
+                line += "%.3f s," % round(tot, 3)
+                line += "%.3f s," % round(sdnracer, 3)
+                line += "%.3f s" % round(bigbug, 3)
+
+                line += "\n"
+              else:
+                # Fill  line with N/A if no data is available
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
+
+              f.write(line)
+
+    # Export table for paper
+    with open(self.paper_file, 'w') as f:
+      f.write(",,,,,SDNRacer,,,BigBug,,,,Clusters,,\n")
+      f.write("App,Topology,Controller,,Events,Races,,Isomorphic Clusters,Timeouts,"
+              "Final Clusters,,Median,Max\n")
+
+      for app in sorted(self.median.keys()):
+        for topology in sorted(self.median[app].keys()):
+          # if topology != 'BinTree':
+          #  continue
+          for controller in sorted(self.median[app][topology].keys()):
+            for steps in self.steps_paper:
+
+              # Trace Info
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s,," % controller
+
+              if steps in self.median[app][topology][controller]:
+                data = self.median[app][topology][controller][steps]
+                # SDNRacer Info
+                line += "%d," % round(np.median(data['n_events']))
+                line += "%d,," % round(np.median(data['n_graphs']))
+                # BigBug Info
+                line += "%.d (%.2f %%)," % (round(np.median(data['n_iso'])),
+                                            round(float(np.median(data['n_iso'])) /
+                                                  float(np.median(data['n_graphs'])) * 100, 2))
+                if np.median(data['n_iso_total']) == 0:
+                  assert np.median(data['n_iso_timeout']) == 0, 'More timeouts than total'
+                  line += "0 (0.00 %),"
+                else:
+                  line += "%d (%.2f %%)," % (round(np.median(data['n_iso_timeout'])),
+                                             round(float(np.median(data['n_iso_timeout'])) /
+                                                   float(np.median(data['n_iso_total'])) * 100, 2))
+                line += "%d (%.2f %%),," % (round(np.median(data['n_final'])),
+                                            round(float(np.median(data['n_final'])) /
+                                                  float(np.median(data['n_graphs'])) * 100, 2))
+                # Graphs per Cluster
+                line += "%.2f," % round(np.median(data['n_gpc_med']), 2)
+                line += "%.2f" % round(np.median(data['n_gpc_max']), 2)
+
+                line += "\n"
+              else:
+                # Fill  line with N/A if no data is available
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A\n"
+
+              f.write(line)
+
+  def fetch_data(self):
+    print "Fetch Data"
+    for folder in os.listdir(self.eval_folder):
+      # Skip files
+      if os.path.isfile(os.path.join(self.eval_folder, folder)):
+        continue
+      # Skip evaluation folder
+      if folder == 'evaluation':
+        continue
+
+      # Try to read eval file
+      eval_file = os.path.join(self.eval_folder, *[folder, 'reduce', 'eval.json'])
       try:
         with open(eval_file, 'r') as f:
           data = json.load(f)
@@ -41,230 +332,73 @@ class Evaluation:
         print "Could not load file: %s" % eval_file
         continue
 
-      settings = trace_info.split('-')
-      controller = settings[0]
-      topology = settings[1]
-      steps = int(re.search(r'\d+$', settings[2]).group())
-      if controller not in self.eval_dicts:
-        self.eval_dicts[controller] = {}
-      if topology not in self.eval_dicts[controller]:
-        self.eval_dicts[controller][topology] = {}
+      except ValueError:
+        print "Could not load file: %s" % eval_file
+        continue
 
-      self.eval_dicts[controller][topology][steps] = data
-      self.num_traces += 1
+      app, topology, controller, steps, iteration = self.get_settings(trace_info)
 
-    # Get number of different controllers/topology pairs
-    self.num_cont_topo = 0
-    self.num_sim = 0
-    for controller in self.eval_dicts.keys():
-      for topology in self.eval_dicts[controller].keys():
-        self.num_cont_topo += 1
-        self.num_sim += len(self.eval_dicts[controller][topology].keys())
+      if app not in self.eval_dicts:
+        self.eval_dicts[app] = {}
+      if topology not in self.eval_dicts[app]:
+        self.eval_dicts[app][topology] = {}
+      if controller not in self.eval_dicts[app][topology]:
+        self.eval_dicts[app][topology][controller] = {}
+      if steps not in self.eval_dicts[app][topology][controller]:
+        self.eval_dicts[app][topology][controller][steps] = {}
+      self.eval_dicts[app][topology][controller][steps][iteration] = data
+      self.eval_dicts[app][topology][controller][steps][iteration]['sim_time'] = None
 
-    # Prepare directory for results
-    self.evaldir = os.path.join(self.eval_folder, 'evaluation')
-    if os.path.exists(self.evaldir):
-      shutil.rmtree(self.evaldir)
-    os.makedirs(self.evaldir)
-
-    # Prepare evaluation Text File
-    self.file = os.path.join(self.evaldir, 'eval.txt')
-
-  def run(self):
-    print "Evaluate Score functions"
-    # Evaluate score functions
-    # Generate boxplot
-    fig = plt.figure(figsize=(pltwidth, plthight * self.num_cont_topo))
-    plt.hold(True)
-
-    num = 0
-    for controller in sorted(self.eval_dicts.keys()):
-      for topology in sorted(self.eval_dicts[controller].keys()):
-        pingpong = []
-        single = []
-        return_path = []
-        multi = []
-        flowexpiry = []
-        labels = []
-        common_write = []
-
-        plot_graph = False
-        for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-          if 'graphs' not in data:
-            continue
-          else:
-            plot_graph = True
-
-          print "\t Generate graph for %s, %s, %s steps" % (controller, topology, steps)
-          # Calculate the percentage of the properties in each graph
-          pingpong.append(len([x for x in data['graphs'] if x['pingpong'] == True]) / float(len(data['graphs'])) * 100)
-          single.append(len([x for x in data['graphs'] if x['single']]) / float(len(data['graphs'])) * 100)
-          return_path.append(len([x for x in data['graphs'] if x['return']]) / float(len(data['graphs'])) * 100)
-          multi.append(len([x for x in data['graphs'] if x['multi']]) / float(len(data['graphs'])) * 100)
-          flowexpiry.append(len([x for x in data['graphs'] if x['flowexpiry']]) / float(len(data['graphs'])) * 100)
-          labels.append(str(steps))
-
-          # Calculate the number of graphs which share a write with another one
-          write_ids = [g['write_ids'] for g in data['graphs']]
-          c_w = 0
-          for g in data['graphs']:
-            for w_id in g['write_ids']:
-              if write_ids.count(w_id) > 1:
-                c_w += 1
-                break
-          common_write.append(c_w / float(len(data['graphs'])))
-
-        if not plot_graph:
-          print "Skip %s, %s" % (controller, topology)
+  def fetch_simulation_time(self):
+    print "Fetch simulation times"
+    with open(self.sim_log, 'r') as f:
+      for line in f:
+        l = line.split(" ")
+        # Only consider successful simulations
+        if l[1] == 'failed':
+          print "Failed simulation: %s" % line
           continue
+        trace_info = l[0].split("/")[-1]
 
-        n = len(pingpong)
-        ind = np.arange(n)
+        app, topology, controller, steps, iteration = self.get_settings(trace_info)
 
-        width = 0.10
+        try:
+          self.eval_dicts[app][topology][controller][steps][iteration]['sim_time'] = float(l[2])
+        except KeyError:
+          # print "Not in eval dicts: %s" % line
+          pass
 
-        # Plot
-        ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
-        bar1 = plt.bar(ind, pingpong, width, color='b')
-        bar2 = plt.bar(ind + width, single, width, color='g')
-        bar3 = plt.bar(ind + (2 * width), return_path, width, color='r')
-        bar4 = plt.bar(ind + (3 * width), common_write, width, color='c')
-        bar5 = plt.bar(ind + (4 * width), multi, width, color='y')
-        bar6 = plt.bar(ind + (5 * width), flowexpiry, width, color='m')
+  def rename(self, s):
+    for k, v in self.r_dict.iteritems():
+      s = s.replace(k, v)
+    return s
 
-        ax.set_title("%s, %s" % (controller, topology), fontsize=ts)
-        ax.set_ylim([0, 100])
-        ax.set_ylabel('Percentage of graph property', fontsize=fs)
-        ax.set_xlabel('Number of steps', fontsize=fs)
-        ax.set_xticks(ind + 3 * width)
-        ax.set_xticklabels(labels, fontsize=fs)
-        ax.tick_params(labelsize=fs)
+  def get_settings(self, trace_string):
+    settings = trace_string.split('-')
+    controller = self.rename(settings[0])
+    # Separate controller and module
+    if controller.startswith('floodlight'):
+      app = controller.replace('floodlight_', '')
+      if app.endswith(' Fx'):
+        app = app[:-3]
+        controller = "Floodlight Fx"
+      else:
+        controller = 'Floodlight'
+    elif controller.startswith('pox_eel'):
+      app = controller.replace('pox_eel_', '')
+      if app.endswith(' Fx'):
+        app = app[:-3]
+        controller = "POX EEL Fx"
+      else:
+        controller = 'POX EEL'
+    else:
+      raise RuntimeError("Unknown controller string %s" % controller)
+    topology = self.rename(settings[1])
+    steps = int(re.search(r'\d+$', settings[2]).group())
+    iteration = settings[3]
 
-        ax.legend((bar1, bar2, bar3, bar4, bar5, bar6),
-                  ('pingpong', 'single send', 'return path', 'common write', 'multi sends', 'flow expired'),
-                  fontsize=fs)
+    return app, topology, controller, steps, iteration
 
-        num += 1
-
-    plt.tight_layout()
-    fig.savefig(os.path.join(self.evaldir, 'graph_properties.pdf'))
-
-    # Create timing graph for each controller and module
-    print "Evaluate timing information"
-    fig = plt.figure(figsize=(pltwidth, plthight * self.num_cont_topo))
-    plt.hold(True)
-
-    # One subplot for each controller and topology
-    num = 0
-    for controller in sorted(self.eval_dicts.keys()):
-      for topology in sorted(self.eval_dicts[controller].keys()):
-        print "\tCalculate graph for %s, %s" % (controller, topology)
-        ax = plt.subplot2grid((self.num_cont_topo, 1), (num, 0))
-        ax.set_title("%s, %s" % (controller, topology), fontsize=ts)
-        t_total = []
-        t_hb_graph = []
-        x_values = []
-        for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-          x_values.append(steps)
-          t_total.append(data['time']['total'])
-          t_hb_graph.append(data['time']['hb_graph'])
-
-        alpha = 0.5
-        plt.fill_between(x_values, t_hb_graph, [0] * len(t_hb_graph), facecolor='r', alpha=alpha)
-        plt.fill_between(x_values, t_total, t_hb_graph, facecolor='b', alpha=alpha)
-
-        plt.plot(x_values, t_hb_graph, label='HbGraph', c='r')
-        plt.plot(x_values, t_total, label='Total', c='b')
-
-        ax.legend(loc='upper left', fontsize=fs)
-
-        ax.set_ylabel('Time [s]', fontsize=fs)
-        ax.set_xlabel('Number of Steps', fontsize=fs)
-        ax.tick_params(labelsize=fs)
-        ax.set_xticks(x_values)
-
-        num += 1
-
-    plt.tight_layout()
-    fig.savefig(os.path.join(self.evaldir, 'timing_information.pdf'))
-
-    # Write eval file
-    print "Write eval.txt file"
-    print "Path %s" % self.file
-    with open(self.file, 'w') as f:
-      print "\t Clustering info"
-      title = "| %26s | %25s | %5s | %8s | %11s | %10s [s] |\n" % \
-              ('Controller', 'Topology', 'Steps', 'NumRaces', 'NumClusters', 'TotTime')
-      sep_line = "-" * len(title) + "\n"
-      f.write(title)
-      for controller in sorted(self.eval_dicts.keys()):
-        f.write(sep_line)
-        for topology in sorted(self.eval_dicts[controller].keys()):
-          for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-            num_races = data['info']['Number of graphs']
-            num_clusters = data['info']['Number of clusters']
-            t_total = data['time']['total']
-
-            line = "| %26s | %25s | %5d | %8d | %11d | %14.3f |\n" % \
-                   (controller, topology, steps, num_races, num_clusters, t_total)
-            f.write(line)
-
-      f.write(sep_line)
-
-      # Clustering infromation for meeting
-      print "\t Timing info"
-      f.write("\n\n\n")
-      for controller in sorted(self.eval_dicts.keys()):
-        for topology in sorted(self.eval_dicts[controller].keys()):
-          controller_str = ""
-          for s in controller.split("_"):
-            controller_str += ("%s " % s.capitalize())
-          f.write("%s%s\n" % (controller_str, topology))
-          f.write("Steps\t# Events\t# Races\t# Isomorphic Clusters\t# Clusters after DBScan\t"
-                  "Cluster 0\tCluster 1\tCluster 2\tCluster 3\n")
-          for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-            line = "%s\t" % str(steps)  # Number of steps
-            line += "%s\t" % data['info']['Number of events']
-            line += "%s\t" % data['info']['Number of graphs']
-            line += "%s\t" % data['clustering']['info']['Number of clusters after iso']
-            line += "%s\t" % data['info']['Number of clusters']
-            for ind in xrange(0,4):
-              if 'Cluster %d' % ind in data:
-                line += "%s\t" % data['Cluster %d' % ind]['Number of graphs']
-              else:
-                line += "-\t"
-            line += "\n"
-            f.write(line)
-
-      # Timing infromation for meeting
-      f.write("\n\n\n")
-      for controller in sorted(self.eval_dicts.keys()):
-        for topology in sorted(self.eval_dicts[controller].keys()):
-          controller_str = ""
-          for s in controller.split("_"):
-            controller_str += ("%s " % s.capitalize())
-          f.write("%s%s\n" % (controller_str, topology))
-          f.write("Steps\t# Events\t# Races\tTotal Time\tHb_Graph\tPreprocess hb_graph\t"
-                  "Subgraphs\tInit Clusters (iso)\tDistance Matrix\tClustering\n")
-          for steps, data in sorted(self.eval_dicts[controller][topology].iteritems()):
-            print "\t\t %s, %s, %s" % (controller, topology, steps)
-            line = "%s\t" % str(steps)  # Number of steps
-            line += "%s\t" % data['info']['Number of events']
-            line += "%s\t" % data['info']['Number of graphs']
-            line += "%.3f s\t" % data['time']['total']
-            line += "%.3f s\t" % data['time']['hb_graph']
-            line += "%.3f s\t" % data['preprocessor']['time']['Total']
-            line += "%.3f s\t" % data['subgraph']['time']['Total']
-            try:
-              line += "%.3f s\t" % data['clustering']['time']['Initialize cluster']
-              line += "%.3f s\t" % data['clustering']['time']['Calculate distance matrix']
-              line += "%.3f s\t" % \
-                      (data['clustering']['time']['Calculate clustering'] +
-                       data['clustering']['time']['Assign new clusters'])
-            except KeyError:
-              line += "-\t-\t-\t"
-            line += "\n"
-            f.write(line)
 
 if __name__ == '__main__':
   # First call hb_graph.py and provide the same parameters
@@ -272,10 +406,9 @@ if __name__ == '__main__':
   empty_delta = 1000000
   parser = argparse.ArgumentParser()
   parser.add_argument('eval_folder', help='Path to evaluation file produced by reduce.py (normally eval.json)')
+  #parser.add_argument('sim_log', help='Path to the simulation log file (optional)', default=None)
 
   args = parser.parse_args()
 
-  evaluation = Evaluation(args.eval_folder)
+  evaluation = Evaluation(args.eval_folder, None)
   evaluation.run()
-
-

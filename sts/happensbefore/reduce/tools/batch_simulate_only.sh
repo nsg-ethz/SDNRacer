@@ -1,34 +1,41 @@
 #!/usr/bin/env bash
 
-#####################################
-# Simulate and clustering
+# Script to simulate multiple different configurations sequentially.
+# Uses the templates in the config folder
 
+# 1. Generates configuration file from template (temporary, is deleted afterwards)
+# 2. Simulates and stores results in folder: "controller_module-topology-steps-iteration"
+
+# Use "batch_reduce_only.sh" afterwards to run bigbug
+
+
+#####################################
 # Variables
 # Number of iterations for each configuration
-iter=15
+iter=1
 
 # Controller & Module
 controller[0]="floodlight_loadbalancer"
-#controller[1]="floodlight_loadbalancer_fixed"
-#controller[2]="floodlight_learningswitch"
-#controller[3]="pox_eel_learningswitch"
-#controller[4]="pox_eel_l2_multi"
-#controller[5]="pox_eel_l2_multi_fixed"
-#controller[6]="floodlight_circuitpusher"
-#controller[7]="floodlight_forwarding"
-#controller[0]="floodlight_firewall"
+controller[1]="floodlight_loadbalancer_fixed"
+controller[2]="floodlight_learningswitch"
+controller[3]="pox_eel_learningswitch"
+controller[4]="pox_eel_l2_multi"
+controller[5]="pox_eel_l2_multi_fixed"
+controller[6]="floodlight_circuitpusher"
+controller[7]="floodlight_forwarding"
+controller[0]="floodlight_firewall"
 
 # Topologies
-#topology[0]="StarTopology"
-#topology[1]="MeshTopology"
-topology[0]="BinaryLeafTreeTopology"
+topology[0]="StarTopology"
+topology[1]="MeshTopology"
+topology[2]="BinaryLeafTreeTopology"
 
 # Steps
-steps[0]="1000"
-#steps[1]="400"
-#steps[2]="600"
-#steps[3]="800"
-#steps[4]="1000"
+steps[0]="200"
+steps[1]="400"
+steps[2]="600"
+steps[3]="800"
+steps[4]="1000"
 
 ############################################
 exp_num=0

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ClusterAlgorithm:
   """
-  Class to rank graphs/clusters and put them in the different rank groups.
+  DBScan clustering algorithm. Not used anymore. Probably changes necessary to make it work again.
   """
 
   def __init__(self,

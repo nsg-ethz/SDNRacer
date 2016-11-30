@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ClusterAlgorithm:
   """
-  Class to rank graphs/clusters and put them in the different rank groups.
+  Agglomerative clustering algorithm.
   """
 
   def __init__(self,
@@ -32,6 +32,7 @@ class ClusterAlgorithm:
     self.max_clusters = int(max_clusters)
 
     # Create score dictionary for all scores != 0. Form: 'function_name': score
+    # The score is the weight of the feature
     self.score_dict = {}
     if float(score_contains_pingpong) != 0:
       self.score_dict['pingpong'] = float(score_contains_pingpong)
@@ -47,25 +48,30 @@ class ClusterAlgorithm:
       self.score_dict['num_hostsends'] = float(score_num_hostsends)
     if float(score_num_proactive_race) != 0:
       self.score_dict['num_proactive'] = float(score_num_proactive_race)
+    # ADD FUNCTION AND WEIGHT FOR NEW FEATURES USED IN THE DISTANCE CALCULATION HERE
 
-    # Maximum score
-    self.max_score = sum(self.score_dict.values())
-
-    # DB Scan variables
-    self.epsilon = float(epsilon)
-    self.linkage = linkage
+    # Agglomerative clustering parameters
+    self.epsilon = float(epsilon)    # Epsilon is the maximum distance for any two graphs in a cluster
+    self.linkage = linkage           # Linkage method
 
     # Dictionary for the evaluation
-    self.eval = {'score': {},
-                 'time': {}}
+    self.eval = {'time': {}}
 
     # Clusters
     self.clusters = []
-    self.remaining = []
 
   def run(self, clusters):
+    """
+    Further clusters the initialized clusters with agglomerative clustering.
+
+    Args:
+      clusters: Initialized clusters
+
+    Returns: List of final clusters, []
+
+    """
     self.clusters = clusters
-    # Calculate closeness between all graphs
+    # Calculate distance matrix
     ts = time.clock()
     logger.debug("Calculate distance matrix")
     distance = scipy.spatial.distance.squareform(self.distance_matrix())
@@ -85,11 +91,11 @@ class ClusterAlgorithm:
     self.clusters = self.create_new_clusters(fcluster)
     self.eval['time']['Assign new clusters'] = time.clock() - ts
 
-    return self.clusters, self.remaining
+    return self.clusters, []
 
   def create_new_clusters(self, fclusters):
     """
-    Assigns the current clusters to the new clusters returnd by the fcluster function.
+    Uses the output of fcluster to create the new clusters.
     """
     new_clusters = [None] * max(fclusters)
 
@@ -121,8 +127,8 @@ class ClusterAlgorithm:
 
   def distance(self, cluster1, cluster2):
     """
-    Returns the distance between two clusters. Each functions returns a value between 1 and 0 to indicate which
-    percentage of the penalty score should be assigned.
+    Returns the distance between two clusters. Each feature functions returns a value between 1 and 0,
+    then it is multiplied with its weight.
     """
     tot_dist = 0
 
@@ -169,4 +175,6 @@ class ClusterAlgorithm:
       return 0
     else:
       return 1
+
+  # DEFINE FUNCTION FOR NEW FEATURE BASED DISTANCE CALCULATION HERE
 

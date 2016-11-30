@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 class Subgraph:
+  """
+  Extracts one subgraph for each race from HB-graph (extraction of per-violation graphs)
+  """
   def __init__(self, hb_graph, races, resultdir):
     self.resultdir = os.path.join(resultdir, 'subgraphs')
     if not os.path.exists(self.resultdir):
@@ -29,9 +32,11 @@ class Subgraph:
 
   def run(self):
     tstart = time.clock()
+    # Extraction
     logger.debug("Generate subgraphs")
     self.generate_subgraphs()
 
+    # Feature detection
     logger.debug("Set subgraph attributes")
     self.set_attributes()
 
@@ -41,7 +46,7 @@ class Subgraph:
 
   def generate_subgraphs(self):
     """
-    Generate all subgraphs from self.races and self.hb_graph.
+    Extract a subgraph from HB-graph for all violations.
     """
     tstart = time.clock()
     # Loop through all races
@@ -64,14 +69,17 @@ class Subgraph:
       subg.node[subg.graph['race'][0]]['color'] = 'red'
       subg.node[subg.graph['race'][1]]['color'] = 'red'
 
-      # Only for debugging
+      # Export subgraph (only debugging)
       # nx.drawing.nx_agraph.write_dot(subg, os.path.join(self.resultdir, 'graph_%03d.dot' % ind))
 
       # Check if the graph is loop free
+      # better to remove this for better performance after the bug with onos traces is fixed
       cycles = list(nx.simple_cycles(subg))
       if cycles:
         logger.error("Cycles found in graph %d (Size: %d)" % (ind, len(subg.nodes())))
+        raise RuntimeError("Cycles found in graph %d (Size: %d)" % (ind, len(subg.nodes())))
 
+      # Append sugraph
       self.subgraphs.append(subg)
 
     self.eval['time']['Generate subgraphs'] = time.clock() - tstart
@@ -79,18 +87,19 @@ class Subgraph:
 
   def set_attributes(self):
     """
-    Sets subgraph attributes which are later used for the clustering/ranking.
+    Sets subgraph attributes which are later used for the clustering/ranking. Most of this attributes are features
+    for the distance calculation.
     """
     tstart = time.clock()
     for g in self.subgraphs:
       # Nodes (Original list of node ids to reconstruct it later if necessary)
       g.graph['nodes'] = g.nodes()
 
-      # Roots (use to determine from how much send events this race origins)
+      # Number of root events feature
       roots = [x for x in g.nodes() if not g.predecessors(x)]
       g.graph['num_roots'] = len(roots)
 
-      # Set if the race is with a AsyncFlowExpiry event
+      # Flow expiry feature
       flow_expiry = False
       for r in roots:
         if isinstance(g.node[r]['event'], hb_events.HbAsyncFlowExpiry):
@@ -98,13 +107,14 @@ class Subgraph:
           break
       g.graph['flowexpiry'] = flow_expiry
 
-      # Return path affected
+      # Reply packet feature
       if len([x for x in g.nodes() if isinstance(g.node[x]['event'], hb_events.HbHostHandle)]) > 0:
         g.graph['return'] = True
       else:
         g.graph['return'] = False
 
       # Write events (list of all race-write-events in the graph)
+      # This was for the discarded distance calculation "Common write events"
       write_events = []
       i_event = g.graph['race'][0]
       k_event = g.graph['race'][1]
@@ -116,10 +126,10 @@ class Subgraph:
       assert len(write_events) > 0, 'No write-race-events in subgraph %d' % g.graph['index']
       g.graph['write_ids'] = write_events
 
-      # Controller-Switch-Pingpong (Indicates if graph contains controller switch pingpong)
+      # PacketIn / PacketOut Bounce feature (pingpong)
       g.graph['pingpong'] = utils.contains_pingpong(g)
 
-      # Check if there is flooding in the graph
+      # Flooding feature
       flooding = False
       # Get MessageHandles:
       msg_handles = [g.node[e]['event'] for e in g.nodes() if isinstance(g.node[e]['event'], hb_events.HbMessageHandle)]
@@ -138,14 +148,16 @@ class Subgraph:
 
       g.graph['flood'] = flooding
 
-      # Number of hostsends
+      # Number of host sends feature
       g.graph['num_hostsends'] = len([x for x in roots if isinstance(g.node[x]['event'], hb_events.HbHostSend)])
 
-      # Proactive Race event
+      # Number of  proactive Race events feature
       g.graph['num_proactive'] = 0
       for rid in g.graph['race']:
         if g.node[rid].get('cmd_type') == 'Proactive':
           g.graph['num_proactive'] += 1
+
+      # ADD DETECTION OF NEW FEATURES HERE
 
     self.eval['time']['Get subgraph attributes'] = time.clock() - tstart
 

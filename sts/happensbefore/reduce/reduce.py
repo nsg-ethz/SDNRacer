@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+"""
+Main file. First runs SDNRacer and the uses the HB-graph and violations as parameters.
+"""
+
+
 import sys
 import os
 import time
@@ -8,7 +13,6 @@ import ConfigParser
 import logging.config
 import argparse
 import json
-import re
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "./.."))
 import hb_graph
@@ -16,6 +20,14 @@ import hb_graph
 
 class Reduce:
   def __init__(self, hb_graph, trace_file, thbgraph):
+    """
+    Prepares logfile and all modules.
+
+    Args:
+      hb_graph:     hb_graph
+      trace_file:   path to trace file
+      thbgraph:     time used to run SDNRacer (for evaluation)
+    """
     tstart = time.clock()
 
     print ""
@@ -109,13 +121,18 @@ class Reduce:
     return
 
   def run(self):
+    """
+    Runs all modules after each other. Prepares data as json for evaluation.
+    """
+
     tstart = time.clock()
-    # Preprocessing
+    # Preprocessing (Trimming of HB-graph)
     self.logger.info("Preprocessing hb_graph")
     self.preprocessor.run()
 
     self.logger.info("Building subgraphs")
-    # Building Subgraphs
+
+    # Building Subgraphs (Extraction of per-violation graphs)
     graphs = self.subgraph.run()
 
     # Clustering
@@ -152,10 +169,10 @@ class Reduce:
     with open(os.path.join(self.resultdir, 'eval.json'), 'w') as outfile:
       json.dump(self.eval, outfile)
 
-    # Export clusters
+    # Export clusters (Representative graphs)
     self.clustering.export_clusters()
 
-    # Generate Info String
+    # Generate Info String (Output for developper)
     # General Information
     s = ''
     s += "General Information\n"

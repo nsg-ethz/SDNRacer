@@ -9,11 +9,21 @@ logger = logging.getLogger(__name__)
 
 
 class Preprocessor:
-  # Provides different functions for preprocessing of the subgraphs
-  def __init__(self, hb_graph, races, remove_nodes=True, remove_pid=True, remove_proactive=True):
+  """
+  Preprocessing of the HB-graph
+  Trimms:
+    - Redundant pid edges
+    - Irrelevant events
+    - Network initialization
+    - Edges that where added by SDNRacer to filter races
+  """
+  def __init__(self, hb_graph, races, remove_nodes=True, remove_pid=True, remove_init=True):
     # set configuration options
     self.remove_nodes = remove_nodes.lower() not in ['false', '0']
     self.remove_pid = remove_pid.lower() not in ['false', '0']
+    self.remove_init = remove_init.lower() not in ['false', '0']
+
+    # HB-graph and race ids
     self.hb_graph = hb_graph
     self.race_ids = []
     for race in races:
@@ -28,23 +38,23 @@ class Preprocessor:
     """
     tstart = time.clock()
 
-    # Remove dispensable edges ('time' and 'dep_raw')
+    # Remove dispensable edges ('time' and 'dep_raw') that where used by the filter functions of SDNRacer
     logger.debug('Remove dispensable edges')
     self.remove_dispensable_edges()
     self.eval['time']['Remove dispensable edges'] = time.clock() - tstart
 
-    # Remove unpersuasive nodes
+    # Remove irrelevant nodes
     if self.remove_nodes:
       logger.debug('Remove unpersuasive nodes')
       self.remove_dispensable_nodes()
 
-    # Remove dispensable pid edges
+    # Remove redundant pid edges
     if self.remove_pid:
       logger.debug('Remove dispensable pid edges')
       self.remove_dispensable_pid_edges()
 
-    # Remove proactive delete_all nodes and according barrier request
-    if self.remove_proactive:
+    # Remove proactive 'delete_all' events and barrier request used for network initialization
+    if self.remove_init:
       logger.debug("Remove proactive nodes")
       self.remove_proactive()
 
@@ -64,7 +74,7 @@ class Preprocessor:
       nodes = []
       for root in roots:
         skip = False
-        # Case 1 Floodlight: Init consist of Barrier - RemoveFlows - Barrier
+        # Case 1 Floodlight Init: Barrier - RemoveFlows - Barrier
         # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
         candidates = []
         if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
@@ -95,7 +105,7 @@ class Preprocessor:
 
         candidates = []
 
-        # Case 2 POX: Init consist of RemoveFlows - Barrier, sometimes repeatedly
+        # Case 2 POX init: RemoveFlows - Barrier, sometimes repeatedly
         # First Event has to be HbMessageHandle with MsgType OFPT_BARRIER_REQUEST
         if (isinstance(self.hb_graph.node[root]['event'], hb_events.HbMessageHandle) and
             self.hb_graph.node[root]['event'].msg_type == 14):
@@ -123,11 +133,7 @@ class Preprocessor:
 
   def remove_dispensable_edges(self):
     """
-    Removes all edges which where only added to filter harmfull races ('time' and 'dep_raw')
-    Args:
-      graph: hb_graph
-
-    Returns: hb_graph with removed edges
+    Removes all edges which where only added to filter harmfull races ('time' and 'dep_raw') in SDNRacer
     """
     # Remove unnecessary edges
     for src, dst, data in self.hb_graph.edges(data=True):
@@ -138,12 +144,7 @@ class Preprocessor:
 
   def remove_dispensable_pid_edges(self):
     """
-    Removes pid edges between two events if there is another patch via the controller.
-    Args:
-      graph: graph to check
-
-    Returns:
-      graph without the pid edges
+    Removes pid edges between two events if there is another path (via controller handle).
     """
     tstart = time.clock()
     # get all root nodes
@@ -209,7 +210,7 @@ class Preprocessor:
 
   def remove_dispensable_nodes(self):
     """
-    Removes all events that happen after (are below) a race event.
+    Removes all events that are not part of a violation or lead to a violation.
     """
     tstart = time.clock()
     logger.debug("Total nodes before removal: %d" % self.hb_graph.number_of_nodes())
