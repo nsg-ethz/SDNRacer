@@ -56,7 +56,6 @@ class Evaluation:
                    '_fixed': ' Fx'}
 
     # Expected simulations number of steps
-    self.print_na = False
     self.exp_steps = [200, 400, 600, 800, 1000]
     self.steps_paper = [200]
 
@@ -216,15 +215,15 @@ class Evaluation:
         for topology in sorted(self.median[app].keys()):
           for controller in sorted(self.median[app][topology].keys()):
             for steps in self.exp_steps:
+
+              # Trace Info
+              line = ""
+              line += "%s," % app
+              line += "%s," % topology
+              line += "%s," % controller
+              line += "%s,," % steps
+
               if steps in self.median[app][topology][controller]:
-                # Trace Info
-                line = ""
-                line += "%s," % app
-                line += "%s," % topology
-                line += "%s," % controller
-                line += "%s,," % steps
-
-
                 data = self.median[app][topology][controller][steps]
                 # SDNRacer Info
                 line += "%d," % round(np.median(data['n_events']))
@@ -259,13 +258,7 @@ class Evaluation:
                 line += "\n"
               else:
                 # Fill  line with N/A if no data is available
-                if self.print_na:
-                  line = ""
-                  line += "%s," % app
-                  line += "%s," % topology
-                  line += "%s," % controller
-                  line += "%s,," % steps
-                  line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"
+                line += "N/A,N/A,,N/A,N/A,N/A,,N/A,N/A,,N/A,N/A,N/A\n"  # Batman
 
               f.write(line)
 
